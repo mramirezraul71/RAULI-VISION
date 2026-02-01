@@ -1,0 +1,46 @@
+package main
+
+import (
+	"log"
+	"net/http"
+	"os"
+	"time"
+
+	"github.com/rauli-vision/espejo/internal/api"
+	"github.com/rauli-vision/espejo/internal/auth"
+	"github.com/rauli-vision/espejo/internal/chat"
+	"github.com/rauli-vision/espejo/internal/middleware"
+	"github.com/rauli-vision/espejo/internal/search"
+	"github.com/rauli-vision/espejo/internal/video"
+)
+
+var version = "1.0.0"
+
+func main() {
+	jwtSecret := os.Getenv("JWT_SECRET")
+	if jwtSecret == "" {
+		jwtSecret = "rauli-vision-espejo-default-secret-change-in-production"
+	}
+	if v := os.Getenv("VERSION"); v != "" {
+		version = v
+	}
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+
+	authSvc := auth.New(jwtSecret)
+	searchSvc := search.New()
+	videoSvc := video.New()
+	chatSvc := chat.New()
+	rl := middleware.NewRateLimiter(120, time.Minute) // 120 req/min por IP
+
+	mux := http.NewServeMux()
+	api.Register(mux, version, authSvc, searchSvc, videoSvc, chatSvc, rl)
+
+	addr := ":" + port
+	log.Printf("Espejo v%s escuchando en %s", version, addr)
+	if err := http.ListenAndServe(addr, mux); err != nil {
+		log.Fatal(err)
+	}
+}

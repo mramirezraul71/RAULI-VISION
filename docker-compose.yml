@@ -1,0 +1,45 @@
+services:
+  espejo:
+    build:
+      context: ./espejo
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - JWT_SECRET=${JWT_SECRET:-rauli-vision-espejo-change-in-production}
+      - VERSION=${VERSION:-1.0.0}
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8080/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+  proxy:
+    build:
+      context: ./cliente-local
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - ESPEJO_URL=http://espejo:8080
+      - CLIENT_ID=${CLIENT_ID:-rauli-local}
+      - CLIENT_SECRET=${CLIENT_SECRET:-rauli-local-secret}
+      - CACHE_DB=/data/rauli-cache.db
+      - VERSION=${VERSION:-1.0.0}
+    volumes:
+      - proxy-cache:/data
+    depends_on:
+      espejo:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  proxy-cache:

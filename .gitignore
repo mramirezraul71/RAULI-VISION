@@ -1,0 +1,31 @@
+# RAULI-VISION
+*.zip
+*.jks
+key.properties
+.env
+credenciales.txt
+*.db
+*.db-wal
+*.db-shm
+
+# Go
+espejo/espejo
+cliente-local/rauli-proxy
+cliente-local/rauli-proxy.exe
+cliente-local/*.db
+
+# Node / Dashboard
+dashboard/node_modules
+dashboard/dist
+dashboard/.vite
+
+# IDE / OS
+.idea
+.vscode
+*.swp
+.DS_Store
+Thumbs.db
+
+# Temp
+_zip_check
+_zip_original
