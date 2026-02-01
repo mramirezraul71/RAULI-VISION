@@ -33,6 +33,10 @@ type responseWriter struct {
 	status int
 }
 
+func (rw *responseWriter) Write(b []byte) (int, error) {
+	return rw.Writer.Write(b)
+}
+
 func (rw *responseWriter) WriteHeader(code int) {
 	rw.status = code
 	rw.ResponseWriter.WriteHeader(code)

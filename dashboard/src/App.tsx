@@ -4,12 +4,15 @@ import { useRegisterSW } from 'virtual:pwa-register/react'
 import { getHealth } from './api/client'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { UpdateModal } from './components/UpdateModal'
+import { HomeButton } from './components/HomeButton'
+import { NetworkStatus } from './components/NetworkStatus'
 import { SearchPage } from './pages/SearchPage'
 import { VideoPage } from './pages/VideoPage'
 import { ChatPage } from './pages/ChatPage'
+import { CamiPage } from './pages/CamiPage'
 import { APP_VERSION, CHANGELOG } from './constants/version'
 
-type Tab = 'search' | 'video' | 'chat'
+type Tab = 'search' | 'video' | 'chat' | 'cami'
 
 export default function App() {
   const [tab, setTab] = useState<Tab>('search')
@@ -68,13 +71,13 @@ export default function App() {
                 {checkingUpdate ? 'Buscando…' : 'Buscar actualización'}
               </button>
               <nav className="flex gap-1">
-                {(['search', 'video', 'chat'] as const).map((t) => (
+                {(['search', 'video', 'chat', 'cami'] as const).map((t) => (
                   <button
                     key={t}
                     onClick={() => setTab(t)}
                     className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${tab === t ? 'bg-accent/20 text-accent' : 'text-muted hover:text-[#e6edf3]'}`}
                   >
-                    {t === 'search' ? 'Búsqueda' : t === 'video' ? 'Video' : 'IA'}
+                    {t === 'search' ? 'Búsqueda' : t === 'video' ? 'Video' : t === 'chat' ? 'IA' : 'CAMI'}
                   </button>
                 ))}
               </nav>
@@ -88,6 +91,7 @@ export default function App() {
           {tab === 'search' && <SearchPage />}
           {tab === 'video' && <VideoPage />}
           {tab === 'chat' && <ChatPage />}
+          {tab === 'cami' && <CamiPage />}
         </main>
         <footer className="border-t border-[rgba(56,139,253,0.2)] py-3 text-center text-muted text-xs flex flex-col gap-1">
           <span>RAULI-VISION · Protocolo negapro.t · Full Operations · Internet curado para entornos de bajo ancho de banda</span>
@@ -102,6 +106,8 @@ export default function App() {
             onLater={() => setNeedRefreshState(false)}
           />
         )}
+        <NetworkStatus />
+        <HomeButton />
       </div>
     </ErrorBoundary>
   )

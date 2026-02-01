@@ -9,6 +9,8 @@ credenciales.txt
 *.db-shm
 
 # Go
+*.exe
+*.sum
 espejo/espejo
 cliente-local/rauli-proxy
 cliente-local/rauli-proxy.exe
@@ -18,6 +20,12 @@ cliente-local/*.db
 dashboard/node_modules
 dashboard/dist
 dashboard/.vite
+dashboard/tsconfig.tsbuildinfo
+
+# Cliente-local static generated files
+cliente-local/static/assets/
+cliente-local/static/workbox-*.js
+cliente-local/static/registerSW.js
 
 # IDE / OS
 .idea
@@ -29,3 +37,16 @@ Thumbs.db
 # Temp
 _zip_check
 _zip_original
+
+# Logs
+*.log
+
+# Coverage
+coverage.out
+coverage.html
+
+# Environment
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local

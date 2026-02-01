@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/rauli-vision/espejo/internal/auth"
+	"github.com/rauli-vision/espejo/internal/cami"
 	"github.com/rauli-vision/espejo/internal/chat"
 	"github.com/rauli-vision/espejo/internal/middleware"
 	"github.com/rauli-vision/espejo/internal/search"
@@ -12,11 +13,14 @@ import (
 )
 
 func Register(mux *http.ServeMux, version string, authSvc *auth.Service, searchSvc *search.Service, videoSvc *video.Service, chatSvc *chat.Service, rl *middleware.RateLimiter) {
+	camiSvc := cami.New()
+
 	h := &Handlers{
 		Auth:    authSvc,
 		Search:  searchSvc,
 		Video:   videoSvc,
 		Chat:    chatSvc,
+		Cami:    camiSvc,
 		Version: version,
 	}
 	wrap := brotliMiddleware
@@ -39,11 +43,26 @@ func Register(mux *http.ServeMux, version string, authSvc *auth.Service, searchS
 	mux.HandleFunc("POST /api/video/", chain(h.serveVideoPost))
 	mux.HandleFunc("POST /api/chat", chain(h.postChat))
 	mux.HandleFunc("GET /api/chat/history", chain(h.getChatHistory))
+
+	// CAMI Channel routes
+	mux.HandleFunc("GET /api/cami/songs", chain(h.getCamiSongs))
+	mux.HandleFunc("GET /api/cami/songs/", chain(h.getCamiSong))
+	mux.HandleFunc("POST /api/cami/songs", chain(h.createCamiSong))
+	mux.HandleFunc("PUT /api/cami/songs/", chain(h.updateCamiSong))
+	mux.HandleFunc("DELETE /api/cami/songs/", chain(h.deleteCamiSong))
+	mux.HandleFunc("POST /api/cami/songs/", chain(h.playCamiSong))
+	mux.HandleFunc("GET /api/cami/albums", chain(h.getCamiAlbums))
+	mux.HandleFunc("GET /api/cami/albums/", chain(h.getCamiAlbum))
+	mux.HandleFunc("POST /api/cami/albums", chain(h.createCamiAlbum))
+	mux.HandleFunc("GET /api/cami/stats", chain(h.getCamiStats))
+	mux.HandleFunc("GET /api/cami/search", chain(h.searchCami))
+	mux.HandleFunc("POST /api/cami/upload", chain(h.uploadCami))
+	mux.HandleFunc("GET /api/cami/popular", chain(h.getPopularCamiSongs))
 }
 
-func (h *Handlers) getSearch(w http.ResponseWriter, r *http.Request) { h.GetSearch(w, r) }
+func (h *Handlers) getSearch(w http.ResponseWriter, r *http.Request)      { h.GetSearch(w, r) }
 func (h *Handlers) getVideoSearch(w http.ResponseWriter, r *http.Request) { h.GetVideoSearch(w, r) }
-func (h *Handlers) postChat(w http.ResponseWriter, r *http.Request) { h.PostChat(w, r) }
+func (h *Handlers) postChat(w http.ResponseWriter, r *http.Request)       { h.PostChat(w, r) }
 func (h *Handlers) getChatHistory(w http.ResponseWriter, r *http.Request) { h.GetChatHistory(w, r) }
 
 func (h *Handlers) serveVideo(w http.ResponseWriter, r *http.Request) {

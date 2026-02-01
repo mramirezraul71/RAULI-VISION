@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/rauli-vision/espejo/internal/auth"
+	"github.com/rauli-vision/espejo/internal/cami"
 	"github.com/rauli-vision/espejo/internal/chat"
 	"github.com/rauli-vision/espejo/internal/search"
 	"github.com/rauli-vision/espejo/internal/validate"
@@ -18,6 +19,7 @@ type Handlers struct {
 	Search  *search.Service
 	Video   *video.Service
 	Chat    *chat.Service
+	Cami    *cami.Service
 	Version string
 }
 
