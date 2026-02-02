@@ -1,6 +1,6 @@
 # RAULI-VISION — Render Blueprint
-# Espejo: Go nativo. Proxy: Docker (Go con CGO/SQLite).
-# Tras el primer deploy, sustituir ESPEJO_URL del proxy por la URL pública del espejo si usas Vercel.
+# Espejo y Proxy: Go nativo (Proxy sin CGO = cache en memoria; evita fallo Docker en Render).
+# Tras el primer deploy, ESPEJO_URL del proxy debe apuntar a la URL pública del espejo.
 
 services:
   - type: web
@@ -8,7 +8,7 @@ services:
     runtime: go
     rootDir: espejo
     plan: starter
-    buildCommand: go mod download && go build -o espejo ./cmd/server
+    buildCommand: go mod download && go build -ldflags="-s -w" -o espejo ./cmd/server
     startCommand: ./espejo
     envVars:
       - key: PORT
@@ -23,10 +23,11 @@ services:
 
   - type: web
     name: proxy-backend
-    runtime: docker
-    dockerfilePath: cliente-local/Dockerfile
-    dockerContext: cliente-local
+    runtime: go
+    rootDir: cliente-local
     plan: starter
+    buildCommand: go mod download && CGO_ENABLED=0 go build -ldflags="-s -w" -o proxy ./cmd/proxy
+    startCommand: ./proxy
     envVars:
       - key: PORT
         value: "3000"
