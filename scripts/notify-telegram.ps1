@@ -19,8 +19,8 @@ foreach ($path in $vaultPaths) {
         if ($_ -match '^\s*([^#=]+)=(.*)$') {
             $key = $matches[1].Trim()
             $val = $matches[2].Trim().Trim('"').Trim("'")
-            if ($key -eq 'TELEGRAM_BOT_TOKEN' -or $key -eq 'BOT_TOKEN') { $token = $val }
-            if ($key -eq 'TELEGRAM_CHAT_ID' -or $key -eq 'CHAT_ID') { $chatId = $val }
+            if ($key -match 'TELEGRAM.*BOT|BOT.*TOKEN') { $token = $val }
+            if ($key -match 'TELEGRAM.*CHAT|CHAT.*ID') { $chatId = $val }
         }
     }
     if ($token -and $chatId) { break }
