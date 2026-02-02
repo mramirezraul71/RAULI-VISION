@@ -20,6 +20,7 @@ Si ambos responden 200, verás **DESPLIEGUE RENDER OK**.
 - **Autorización de upgrade:** El usuario autoriza subir al plan **Starter (~$7/mes por servicio)** si el sistema se vuelve lento (cold starts, spin-down tras inactividad). Ver sección [Upgrade a Starter](#upgrade-a-starter) más abajo.
 - Dashboard de Render: https://dashboard.render.com
 - **Notificaciones Telegram:** al redactar fixes, usar **ldflags** (L minúscula), no "Idflags".
+- **Rama en Render:** usar **`master`** (minúsculas). No "Maestro" ni "MASTER". El Blueprint en render.yaml tiene `branch: master`; al sincronizar, el Dashboard debe mostrar esa rama.
 
 **Enlaces del despliegue (según render.yaml):**
 
@@ -75,9 +76,10 @@ Cuando **Espejo** o **Proxy** muestran "Despliegue fallido" en el Dashboard:
    - En **Logs** verás la salida del build (go build, docker build) o del arranque (./espejo, ./proxy).
 
 2. **Causas habituales**  
-   - **"falta la entrada go.sum" / "cd: espejo: No such file":** Render puede ejecutar el build desde **raíz del repo** o desde rootDir. Solución aplicada: **sin rootDir**, build desde raíz con `go mod download -C espejo` y `go build -C espejo -o espejo/espejo ./cmd/server` (Go 1.20+). Así el módulo se resuelve siempre desde la raíz. `buildFilter.paths: [espejo/**]` limita el redeploy a cambios en espejo.  
+   - **"falta la entrada go.sum" para `github.com/rauli-vision/espejo/internal/...`:** Go intenta descargar paquetes internos como módulos externos. **Solución:** en `render.yaml` cada servicio debe tener **`rootDir`** (espejo / cliente-local). Así Render ejecuta el build **desde ese directorio** y Go encuentra `go.mod` y resuelve los internos. Build: `go mod download && go build -o espejo ./cmd/server` (sin `-C`, rutas relativas al rootDir).  
+   - **Rama incorrecta:** En el Dashboard de Render la rama debe ser **`master`** (minúsculas). Si aparece "Maestro" o "main", corregir en Settings → Branch o sincronizar el Blueprint (render.yaml tiene `branch: master`).  
    - **Espejo (Go):** dependencias no descargadas → el buildCommand debe incluir `go mod download &&` antes de `go build`.  
-   - **Proxy (Go nativo):** usa `CGO_ENABLED=0` y cache en memoria; no requiere Docker ni `cd`.  
+   - **Proxy (Go nativo):** usa `CGO_ENABLED=0` y cache en memoria; no requiere Docker.  
    - **Health check:** si el build termina pero el deploy falla, puede ser que `/api/health` no responda a tiempo; el servicio debe escuchar en `PORT` y responder 200 en `healthCheckPath`.
 
 3. **Tras corregir**  
