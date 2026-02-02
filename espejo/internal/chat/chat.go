@@ -1,7 +1,10 @@
 package chat
 
 import (
+	"bufio"
 	"encoding/json"
+	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -16,21 +19,97 @@ type Message struct {
 }
 
 type Service struct {
-	mu       sync.RWMutex
-	messages []Message
+	mu              sync.RWMutex
+	messages        []Message
+	rauliCloudURL   string
+	rauliCloudModel string
 }
 
 func New() *Service {
-	return &Service{messages: make([]Message, 0)}
+	url := strings.TrimSpace(os.Getenv("RAULI_CLOUD_URL"))
+	model := strings.TrimSpace(os.Getenv("RAULI_CLOUD_MODEL"))
+	if model == "" {
+		model = "llama3.1"
+	}
+	return &Service{
+		messages:        make([]Message, 0),
+		rauliCloudURL:   url,
+		rauliCloudModel: model,
+	}
+}
+
+// sseEvent representa un evento "data: {...}" del streaming de RAULI-CLOUD.
+type sseEvent struct {
+	Content string `json:"content"`
+	Done   bool   `json:"done"`
+	Error  string `json:"error"`
+}
+
+func (s *Service) callRauliCloud(userMessage, contextURL string) (reply string, err error) {
+	if s.rauliCloudURL == "" {
+		return "", nil
+	}
+	prompt := userMessage
+	if contextURL != "" {
+		prompt = "Contexto (URL a resumir): " + contextURL + "\n\nPregunta del usuario: " + userMessage
+	}
+	body := map[string]string{
+		"model":  s.rauliCloudModel,
+		"prompt": prompt,
+	}
+	bodyJSON, _ := json.Marshal(body)
+	req, err := http.NewRequest("POST", strings.TrimSuffix(s.rauliCloudURL, "/")+"/chat", strings.NewReader(string(bodyJSON)))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	client := &http.Client{Timeout: 120 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", nil
+	}
+	var full strings.Builder
+	scanner := bufio.NewScanner(resp.Body)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if !strings.HasPrefix(line, "data: ") {
+			continue
+		}
+		var ev sseEvent
+		if json.Unmarshal([]byte(line[6:]), &ev) != nil {
+			continue
+		}
+		if ev.Error != "" {
+			return "", nil
+		}
+		full.WriteString(ev.Content)
+		if ev.Done {
+			break
+		}
+	}
+	return full.String(), nil
 }
 
 func (s *Service) Chat(userMessage, contextURL string) (reply string, sources []string, err error) {
+	if s.rauliCloudURL != "" {
+		reply, err = s.callRauliCloud(userMessage, contextURL)
+		if err == nil && reply != "" {
+			if contextURL != "" {
+				sources = []string{contextURL}
+			}
+			return reply, sources, nil
+		}
+	}
 	reply = "Respuesta de ejemplo desde el espejo. "
 	if contextURL != "" {
-		reply += "Se solicitó resumir la URL: " + contextURL + ". En producción aquí se obtendría el contenido, se pasaría al LLM y se devolvería el resumen en texto plano."
+		reply += "Se solicitó resumir la URL: " + contextURL + ". Configure RAULI_CLOUD_URL para usar IA local (Ollama)."
 		sources = []string{contextURL}
 	} else {
-		reply += "En producción la IA procesaría tu pregunta y devolvería una respuesta breve."
+		reply += "Configure RAULI_CLOUD_URL=http://localhost:8000 para conectar con RAULI-CLOUD (Ollama)."
 	}
 	return reply, sources, nil
 }

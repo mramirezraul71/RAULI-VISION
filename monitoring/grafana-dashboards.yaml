@@ -1,0 +1,454 @@
+apiVersion: v1
+kind: ConfigMapList
+metadata:
+  name: rauli-vision-grafana-dashboards
+  namespace: rauli-vision-production
+  labels:
+    grafana_dashboard: "1"
+    app.kubernetes.io/name: rauli-vision
+    app.kubernetes.io/component: monitoring
+items:
+- apiVersion: v1
+  kind: ConfigMap
+  metadata:
+    name: rauli-vision-overview-dashboard
+    labels:
+      grafana_dashboard: "1"
+      app.kubernetes.io/name: rauli-vision
+  data:
+    rauli-vision-overview.json: |
+      {
+        "dashboard": {
+          "id": null,
+          "title": "RAULI-VISION Production Overview",
+          "tags": ["rauli-vision", "production"],
+          "timezone": "browser",
+          "panels": [
+            {
+              "id": 1,
+              "title": "Request Rate",
+              "type": "graph",
+              "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+              "targets": [
+                {
+                  "expr": "rate(http_requests_total[5m])",
+                  "legendFormat": "{{method}} {{status}}",
+                  "refId": "A"
+                }
+              ],
+              "yAxes": [
+                {"label": "Requests/sec", "min": 0},
+                {"show": false}
+              ]
+            },
+            {
+              "id": 2,
+              "title": "Response Time",
+              "type": "graph",
+              "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+              "targets": [
+                {
+                  "expr": "histogram_quantile(0.50, rate(http_request_duration_seconds_bucket[5m]))",
+                  "legendFormat": "50th percentile",
+                  "refId": "A"
+                },
+                {
+                  "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m]))",
+                  "legendFormat": "95th percentile",
+                  "refId": "B"
+                },
+                {
+                  "expr": "histogram_quantile(0.99, rate(http_request_duration_seconds_bucket[5m]))",
+                  "legendFormat": "99th percentile",
+                  "refId": "C"
+                }
+              ],
+              "yAxes": [
+                {"label": "Seconds", "min": 0},
+                {"show": false}
+              ]
+            },
+            {
+              "id": 3,
+              "title": "Error Rate",
+              "type": "singlestat",
+              "gridPos": {"h": 8, "w": 6, "x": 0, "y": 8},
+              "targets": [
+                {
+                  "expr": "rate(http_requests_total{status=~\"5..\"}[5m]) / rate(http_requests_total[5m])",
+                  "legendFormat": "Error Rate",
+                  "refId": "A"
+                }
+              ],
+              "valueMaps": [
+                {"value": "null", "text": "N/A"},
+                {"value": "0", "text": "0%"}
+              ],
+              "thresholds": "0.01,0.05",
+              "unit": "percent"
+            },
+            {
+              "id": 4,
+              "title": "Uptime",
+              "type": "singlestat",
+              "gridPos": {"h": 8, "w": 6, "x": 6, "y": 8},
+              "targets": [
+                {
+                  "expr": "up{job=\"rauli-vision\"}",
+                  "legendFormat": "Uptime",
+                  "refId": "A"
+                }
+              ],
+              "valueMaps": [
+                {"value": "null", "text": "N/A"},
+                {"value": "0", "text": "DOWN"},
+                {"value": "1", "text": "UP"}
+              ],
+              "thresholds": "1"
+            },
+            {
+              "id": 5,
+              "title": "CPU Usage",
+              "type": "graph",
+              "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+              "targets": [
+                {
+                  "expr": "rate(container_cpu_usage_seconds_total[5m]) * 100",
+                  "legendFormat": "{{pod}}",
+                  "refId": "A"
+                }
+              ],
+              "yAxes": [
+                {"label": "Percent", "min": 0, "max": 100},
+                {"show": false}
+              ]
+            },
+            {
+              "id": 6,
+              "title": "Memory Usage",
+              "type": "graph",
+              "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+              "targets": [
+                {
+                  "expr": "container_memory_usage_bytes / 1024 / 1024",
+                  "legendFormat": "{{pod}}",
+                  "refId": "A"
+                }
+              ],
+              "yAxes": [
+                {"label": "MB", "min": 0},
+                {"show": false}
+              ]
+            },
+            {
+              "id": 7,
+              "title": "Database Connections",
+              "type": "graph",
+              "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+              "targets": [
+                {
+                  "expr": "pg_stat_database_numbackends",
+                  "legendFormat": "Active Connections",
+                  "refId": "A"
+                },
+                {
+                  "expr": "pg_settings_max_connections",
+                  "legendFormat": "Max Connections",
+                  "refId": "B"
+                }
+              ],
+              "yAxes": [
+                {"label": "Connections", "min": 0},
+                {"show": false}
+              ]
+            }
+          ],
+          "time": {"from": "now-1h", "to": "now"},
+          "refresh": "30s"
+        }
+      }
+- apiVersion: v1
+  kind: ConfigMap
+  metadata:
+    name: rauli-vision-business-dashboard
+    labels:
+      grafana_dashboard: "1"
+      app.kubernetes.io/name: rauli-vision
+  data:
+    rauli-vision-business.json: |
+      {
+        "dashboard": {
+          "id": null,
+          "title": "RAULI-VISION Business Metrics",
+          "tags": ["rauli-vision", "business"],
+          "timezone": "browser",
+          "panels": [
+            {
+              "id": 1,
+              "title": "Active Users",
+              "type": "stat",
+              "gridPos": {"h": 8, "w": 6, "x": 0, "y": 0},
+              "targets": [
+                {
+                  "expr": "rauli_vision_active_users_total",
+                  "legendFormat": "Active Users",
+                  "refId": "A"
+                }
+              ],
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "short",
+                  "thresholds": {
+                    "steps": [
+                      {"color": "green", "value": null},
+                      {"color": "yellow", "value": 100},
+                      {"color": "red", "value": 500}
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "id": 2,
+              "title": "Search Requests",
+              "type": "graph",
+              "gridPos": {"h": 8, "w": 12, "x": 6, "y": 0},
+              "targets": [
+                {
+                  "expr": "rate(rauli_vision_search_requests_total[5m])",
+                  "legendFormat": "Search Requests/sec",
+                  "refId": "A"
+                }
+              ],
+              "yAxes": [
+                {"label": "Requests/sec", "min": 0},
+                {"show": false}
+              ]
+            },
+            {
+              "id": 3,
+              "title": "Video Streams",
+              "type": "graph",
+              "gridPos": {"h": 8, "w": 12, "x": 18, "y": 0},
+              "targets": [
+                {
+                  "expr": "rate(rauli_vision_video_streams_total[5m])",
+                  "legendFormat": "Video Streams/sec",
+                  "refId": "A"
+                }
+              ],
+              "yAxes": [
+                {"label": "Streams/sec", "min": 0},
+                {"show": false}
+              ]
+            },
+            {
+              "id": 4,
+              "title": "User Satisfaction",
+              "type": "gauge",
+              "gridPos": {"h": 8, "w": 6, "x": 0, "y": 8},
+              "targets": [
+                {
+                  "expr": "rauli_vision_user_satisfaction_score",
+                  "legendFormat": "Satisfaction Score",
+                  "refId": "A"
+                }
+              ],
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "percent",
+                  "min": 0,
+                  "max": 100,
+                  "thresholds": {
+                    "steps": [
+                      {"color": "red", "value": 0},
+                      {"color": "yellow", "value": 70},
+                      {"color": "green", "value": 85}
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "id": 5,
+              "title": "Feature Usage",
+              "type": "piechart",
+              "gridPos": {"h": 8, "w": 12, "x": 6, "y": 8},
+              "targets": [
+                {
+                  "expr": "rauli_vision_feature_usage_total",
+                  "legendFormat": "{{feature}}",
+                  "refId": "A"
+                }
+              ]
+            },
+            {
+              "id": 6,
+              "title": "Response Time by Feature",
+              "type": "heatmap",
+              "gridPos": {"h": 8, "w": 12, "x": 18, "y": 8},
+              "targets": [
+                {
+                  "expr": "histogram_quantile(0.95, rate(rauli_vision_feature_duration_seconds_bucket[5m]))",
+                  "legendFormat": "{{feature}}",
+                  "refId": "A"
+                }
+              ]
+            },
+            {
+              "id": 7,
+              "title": "Revenue Growth",
+              "type": "graph",
+              "gridPos": {"h": 8, "w": 24, "x": 0, "y": 16},
+              "targets": [
+                {
+                  "expr": "increase(rauli_vision_revenue_total[1d])",
+                  "legendFormat": "Daily Revenue",
+                  "refId": "A"
+                }
+              ],
+              "yAxes": [
+                {"label": "Revenue ($)", "min": 0},
+                {"show": false}
+              ]
+            }
+          ],
+          "time": {"from": "now-24h", "to": "now"},
+          "refresh": "1m"
+        }
+      }
+- apiVersion: v1
+  kind: ConfigMap
+  metadata:
+    name: rauli-vision-infrastructure-dashboard
+    labels:
+      grafana_dashboard: "1"
+      app.kubernetes.io/name: rauli-vision
+  data:
+    rauli-vision-infrastructure.json: |
+      {
+        "dashboard": {
+          "id": null,
+          "title": "RAULI-VISION Infrastructure",
+          "tags": ["rauli-vision", "infrastructure"],
+          "timezone": "browser",
+          "panels": [
+            {
+              "id": 1,
+              "title": "Pod Status",
+              "type": "stat",
+              "gridPos": {"h": 8, "w": 6, "x": 0, "y": 0},
+              "targets": [
+                {
+                  "expr": "kube_pod_status_phase{phase=\"Running\"}",
+                  "legendFormat": "Running",
+                  "refId": "A"
+                }
+              ],
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "short",
+                  "thresholds": {
+                    "steps": [
+                      {"color": "red", "value": null},
+                      {"color": "green", "value": 1}
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "id": 2,
+              "title": "Node CPU",
+              "type": "graph",
+              "gridPos": {"h": 8, "w": 12, "x": 6, "y": 0},
+              "targets": [
+                {
+                  "expr": "rate(node_cpu_seconds_total{mode=\"idle\"}[5m]) * 100",
+                  "legendFormat": "Idle CPU - {{instance}}",
+                  "refId": "A"
+                }
+              ],
+              "yAxes": [
+                {"label": "Percent", "min": 0, "max": 100},
+                {"show": false}
+              ]
+            },
+            {
+              "id": 3,
+              "title": "Node Memory",
+              "type": "graph",
+              "gridPos": {"h": 8, "w": 12, "x": 18, "y": 0},
+              "targets": [
+                {
+                  "expr": "node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes * 100",
+                  "legendFormat": "Available Memory - {{instance}}",
+                  "refId": "A"
+                }
+              ],
+              "yAxes": [
+                {"label": "Percent", "min": 0, "max": 100},
+                {"show": false}
+              ]
+            },
+            {
+              "id": 4,
+              "title": "Disk Usage",
+              "type": "graph",
+              "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+              "targets": [
+                {
+                  "expr": "node_filesystem_avail_bytes / node_filesystem_size_bytes * 100",
+                  "legendFormat": "Available Disk - {{instance}}",
+                  "refId": "A"
+                }
+              ],
+              "yAxes": [
+                {"label": "Percent", "min": 0, "max": 100},
+                {"show": false}
+              ]
+            },
+            {
+              "id": 5,
+              "title": "Network Traffic",
+              "type": "graph",
+              "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+              "targets": [
+                {
+                  "expr": "rate(node_network_receive_bytes_total[5m])",
+                  "legendFormat": "RX - {{instance}}",
+                  "refId": "A"
+                },
+                {
+                  "expr": "rate(node_network_transmit_bytes_total[5m])",
+                  "legendFormat": "TX - {{instance}}",
+                  "refId": "B"
+                }
+              ],
+              "yAxes": [
+                {"label": "Bytes/sec", "min": 0},
+                {"show": false}
+              ]
+            },
+            {
+              "id": 6,
+              "title": "Container Restarts",
+              "type": "graph",
+              "gridPos": {"h": 8, "w": 24, "x": 0, "y": 16},
+              "targets": [
+                {
+                  "expr": "rate(kube_pod_container_status_restarts_total[15m])",
+                  "legendFormat": "{{pod}} - {{container}}",
+                  "refId": "A"
+                }
+              ],
+              "yAxes": [
+                {"label": "Restarts/sec", "min": 0},
+                {"show": false}
+              ]
+            }
+          ],
+          "time": {"from": "now-1h", "to": "now"},
+          "refresh": "30s"
+        }
+      }

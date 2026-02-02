@@ -1,0 +1,131 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: rauli-vision-rules
+  namespace: rauli-vision-production
+  labels:
+    app.kubernetes.io/name: rauli-vision
+    app.kubernetes.io/component: monitoring
+spec:
+  groups:
+  - name: rauli-vision.rules
+    rules:
+    # High error rate alert
+    - alert: RauliVisionHighErrorRate
+      expr: rate(http_requests_total{status=~"5.."}[5m]) / rate(http_requests_total[5m]) > 0.05
+      for: 5m
+      labels:
+        severity: critical
+        service: rauli-vision
+      annotations:
+        summary: "High error rate detected in RAULI-VISION"
+        description: "Error rate is {{ $value | humanizePercentage }} for {{ $labels.instance }}"
+        runbook_url: "https://docs.rauli-vision.com/runbooks/high-error-rate"
+    
+    # High response time alert
+    - alert: RauliVisionHighResponseTime
+      expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 1
+      for: 5m
+      labels:
+        severity: warning
+        service: rauli-vision
+      annotations:
+        summary: "High response time detected in RAULI-VISION"
+        description: "95th percentile response time is {{ $value }}s for {{ $labels.instance }}"
+        runbook_url: "https://docs.rauli-vision.com/runbooks/high-response-time"
+    
+    # High CPU usage alert
+    - alert: RauliVisionHighCPUUsage
+      expr: rate(container_cpu_usage_seconds_total[5m]) * 100 > 80
+      for: 10m
+      labels:
+        severity: warning
+        service: rauli-vision
+      annotations:
+        summary: "High CPU usage detected in RAULI-VISION"
+        description: "CPU usage is {{ $value }}% for {{ $labels.pod }}"
+        runbook_url: "https://docs.rauli-vision.com/runbooks/high-cpu-usage"
+    
+    # High memory usage alert
+    - alert: RauliVisionHighMemoryUsage
+      expr: container_memory_usage_bytes / container_spec_memory_limit_bytes * 100 > 90
+      for: 5m
+      labels:
+        severity: warning
+        service: rauli-vision
+      annotations:
+        summary: "High memory usage detected in RAULI-VISION"
+        description: "Memory usage is {{ $value | humanizePercentage }} for {{ $labels.pod }}"
+        runbook_url: "https://docs.rauli-vision.com/runbooks/high-memory-usage"
+    
+    # Pod restart alert
+    - alert: RauliVisionPodRestart
+      expr: rate(kube_pod_container_status_restarts_total[15m]) > 0
+      for: 5m
+      labels:
+        severity: warning
+        service: rauli-vision
+      annotations:
+        summary: "Pod restart detected in RAULI-VISION"
+        description: "Pod {{ $labels.pod }} has restarted {{ $value }} times in the last 15 minutes"
+        runbook_url: "https://docs.rauli-vision.com/runbooks/pod-restart"
+    
+    # Database connection high alert
+    - alert: RauliVisionDatabaseConnectionsHigh
+      expr: pg_stat_database_numbackends / pg_settings_max_connections > 0.8
+      for: 5m
+      labels:
+        severity: warning
+        service: rauli-vision
+      annotations:
+        summary: "Database connections high in RAULI-VISION"
+        description: "{{ $value | humanizePercentage }} of database connections used"
+        runbook_url: "https://docs.rauli-vision.com/runbooks/database-connections"
+    
+    # Service down alert
+    - alert: RauliVisionServiceDown
+      expr: up{job="rauli-vision"} == 0
+      for: 1m
+      labels:
+        severity: critical
+        service: rauli-vision
+      annotations:
+        summary: "RAULI-VISION service is down"
+        description: "Service {{ $labels.instance }} has been down for more than 1 minute"
+        runbook_url: "https://docs.rauli-vision.com/runbooks/service-down"
+    
+    # SSL certificate expiry alert
+    - alert: RauliVisionSSLCertificateExpiry
+      expr: probe_ssl_earliest_cert_expiry - time() < 86400 * 7
+      for: 1h
+      labels:
+        severity: warning
+        service: rauli-vision
+      annotations:
+        summary: "SSL certificate expiring soon for RAULI-VISION"
+        description: "SSL certificate for {{ $labels.instance }} expires in {{ $value | humanizeDuration }}"
+        runbook_url: "https://docs.rauli-vision.com/runbooks/ssl-expiry"
+    
+    # Disk space low alert
+    - alert: RauliVisionDiskSpaceLow
+      expr: node_filesystem_avail_bytes / node_filesystem_size_bytes * 100 < 10
+      for: 5m
+      labels:
+        severity: warning
+        service: rauli-vision
+      annotations:
+        summary: "Disk space low for RAULI-VISION"
+        description: "Disk space is {{ $value | humanizePercentage }} full on {{ $labels.instance }}"
+        runbook_url: "https://docs.rauli-vision.com/runbooks/disk-space"
+    
+    # Rate limit exceeded alert
+    - alert: RauliVisionRateLimitExceeded
+      expr: rate(http_requests_total{status="429"}[5m]) > 10
+      for: 5m
+      labels:
+        severity: warning
+        service: rauli-vision
+      annotations:
+        summary: "Rate limit exceeded in RAULI-VISION"
+        description: "Rate limit exceeded {{ $value }} times in the last 5 minutes"
+        runbook_url: "https://docs.rauli-vision.com/runbooks/rate-limit"

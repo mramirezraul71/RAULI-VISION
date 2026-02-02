@@ -6,13 +6,15 @@ import { ErrorBoundary } from './components/ErrorBoundary'
 import { UpdateModal } from './components/UpdateModal'
 import { HomeButton } from './components/HomeButton'
 import { NetworkStatus } from './components/NetworkStatus'
+import { FeedbackAI } from './components/FeedbackAI'
 import { SearchPage } from './pages/SearchPage'
 import { VideoPage } from './pages/VideoPage'
 import { ChatPage } from './pages/ChatPage'
 import { CamiPage } from './pages/CamiPage'
+import { AccessPage } from './pages/AccessPage'
 import { APP_VERSION, CHANGELOG } from './constants/version'
 
-type Tab = 'search' | 'video' | 'chat' | 'cami'
+type Tab = 'search' | 'video' | 'chat' | 'cami' | 'access'
 
 export default function App() {
   const [tab, setTab] = useState<Tab>('search')
@@ -71,13 +73,21 @@ export default function App() {
                 {checkingUpdate ? 'Buscando…' : 'Buscar actualización'}
               </button>
               <nav className="flex gap-1">
-                {(['search', 'video', 'chat', 'cami'] as const).map((t) => (
+                {(['search', 'video', 'chat', 'cami', 'access'] as const).map((t) => (
                   <button
                     key={t}
                     onClick={() => setTab(t)}
                     className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${tab === t ? 'bg-accent/20 text-accent' : 'text-muted hover:text-[#e6edf3]'}`}
                   >
-                    {t === 'search' ? 'Búsqueda' : t === 'video' ? 'Video' : t === 'chat' ? 'IA' : 'CAMI'}
+                    {t === 'search'
+                      ? 'Búsqueda'
+                      : t === 'video'
+                        ? 'Video'
+                        : t === 'chat'
+                          ? 'IA'
+                          : t === 'cami'
+                            ? 'CAMI'
+                            : 'Acceso'}
                   </button>
                 ))}
               </nav>
@@ -92,6 +102,7 @@ export default function App() {
           {tab === 'video' && <VideoPage />}
           {tab === 'chat' && <ChatPage />}
           {tab === 'cami' && <CamiPage />}
+          {tab === 'access' && <AccessPage />}
         </main>
         <footer className="border-t border-[rgba(56,139,253,0.2)] py-3 text-center text-muted text-xs flex flex-col gap-1">
           <span>RAULI-VISION · Protocolo negapro.t · Full Operations · Internet curado para entornos de bajo ancho de banda</span>
@@ -108,6 +119,7 @@ export default function App() {
         )}
         <NetworkStatus />
         <HomeButton />
+        <FeedbackAI />
       </div>
     </ErrorBoundary>
   )

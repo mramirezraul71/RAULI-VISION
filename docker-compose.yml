@@ -8,7 +8,11 @@ services:
     environment:
       - PORT=8080
       - JWT_SECRET=${JWT_SECRET:-rauli-vision-espejo-change-in-production}
+      - ADMIN_TOKEN=${ADMIN_TOKEN:-rauli-admin-local}
+      - ACCESS_STORE=/app/data/access-store.json
       - VERSION=${VERSION:-1.0.0}
+    volumes:
+      - espejo-data:/app/data
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8080/api/health"]
       interval: 10s
@@ -43,3 +47,4 @@ services:
 
 volumes:
   proxy-cache:
+  espejo-data:

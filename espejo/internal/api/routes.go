@@ -4,24 +4,30 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/rauli-vision/espejo/internal/access"
 	"github.com/rauli-vision/espejo/internal/auth"
 	"github.com/rauli-vision/espejo/internal/cami"
 	"github.com/rauli-vision/espejo/internal/chat"
+	"github.com/rauli-vision/espejo/internal/feedback"
 	"github.com/rauli-vision/espejo/internal/middleware"
 	"github.com/rauli-vision/espejo/internal/search"
 	"github.com/rauli-vision/espejo/internal/video"
 )
 
-func Register(mux *http.ServeMux, version string, authSvc *auth.Service, searchSvc *search.Service, videoSvc *video.Service, chatSvc *chat.Service, rl *middleware.RateLimiter) {
+func Register(mux *http.ServeMux, version string, authSvc *auth.Service, searchSvc *search.Service, videoSvc *video.Service, chatSvc *chat.Service, accessSvc *access.Service, adminToken string, rl *middleware.RateLimiter) {
 	camiSvc := cami.New()
+	feedbackSvc := feedback.New()
 
 	h := &Handlers{
-		Auth:    authSvc,
-		Search:  searchSvc,
-		Video:   videoSvc,
-		Chat:    chatSvc,
-		Cami:    camiSvc,
-		Version: version,
+		Auth:       authSvc,
+		Search:     searchSvc,
+		Video:      videoSvc,
+		Chat:       chatSvc,
+		Cami:       camiSvc,
+		Feedback:   feedbackSvc,
+		Access:     accessSvc,
+		Version:    version,
+		AdminToken: strings.TrimSpace(adminToken),
 	}
 	wrap := brotliMiddleware
 	logWrap := middleware.Logging
@@ -37,6 +43,11 @@ func Register(mux *http.ServeMux, version string, authSvc *auth.Service, searchS
 
 	mux.HandleFunc("POST /auth/token", rateWrap(logWrap(h.PostAuthToken)))
 	mux.HandleFunc("GET /api/health", rateWrap(logWrap(h.GetHealth)))
+	mux.HandleFunc("POST /api/access/requests", rateWrap(logWrap(wrap(h.PostAccessRequest))))
+	mux.HandleFunc("GET /api/access/requests", rateWrap(logWrap(wrap(h.ListAccessRequests))))
+	mux.HandleFunc("POST /api/access/requests/", rateWrap(logWrap(wrap(h.HandleAccessRequestAction))))
+	mux.HandleFunc("GET /api/access/users", rateWrap(logWrap(wrap(h.ListAccessUsers))))
+	mux.HandleFunc("PUT /api/access/users/", rateWrap(logWrap(wrap(h.HandleAccessUserAction))))
 	mux.HandleFunc("GET /api/search", chain(h.getSearch))
 	mux.HandleFunc("GET /api/video/search", chain(h.getVideoSearch))
 	mux.HandleFunc("/api/video/", chain(h.serveVideo))
@@ -58,6 +69,10 @@ func Register(mux *http.ServeMux, version string, authSvc *auth.Service, searchS
 	mux.HandleFunc("GET /api/cami/search", chain(h.searchCami))
 	mux.HandleFunc("POST /api/cami/upload", chain(h.uploadCami))
 	mux.HandleFunc("GET /api/cami/popular", chain(h.getPopularCamiSongs))
+
+	// Feedback AI routes
+	mux.HandleFunc("POST /api/feedback/brain", chain(h.processFeedback))
+	mux.HandleFunc("GET /api/feedback/stats", chain(h.getFeedbackStats))
 }
 
 func (h *Handlers) getSearch(w http.ResponseWriter, r *http.Request)      { h.GetSearch(w, r) }

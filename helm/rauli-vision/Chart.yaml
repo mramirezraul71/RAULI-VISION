@@ -1,0 +1,30 @@
+apiVersion: v2
+name: rauli-vision
+description: Helm chart for RAULI-VISION enterprise deployment
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+
+keywords:
+  - react
+  - go
+  - python
+  - microservices
+  - enterprise
+
+maintainers:
+  - name: RAULI-VISION Team
+    email: team@rauli-vision.com
+
+sources:
+  - https://github.com/rauli-vision/rauli-vision
+
+dependencies:
+  - name: postgresql
+    version: 12.x.x
+    repository: https://charts.bitnami.com/bitnami
+    condition: postgresql.enabled
+  - name: redis
+    version: 17.x.x
+    repository: https://charts.bitnami.com/bitnami
+    condition: redis.enabled

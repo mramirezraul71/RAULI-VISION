@@ -1,8 +1,6 @@
 package main
 
 import (
-	"embed"
-	"io/fs"
 	"log"
 	"net/http"
 	"os"
@@ -12,9 +10,6 @@ import (
 	"github.com/rauli-vision/cliente-local/internal/cache"
 	"github.com/rauli-vision/cliente-local/internal/middleware"
 )
-
-//go:embed static/*
-var staticFS embed.FS
 
 var version = "1.0.0"
 
@@ -49,8 +44,8 @@ func main() {
 	}
 	defer c.Close()
 
-	staticRoot, _ := fs.Sub(staticFS, "static")
-	proxy := api.NewProxy(espejoURL, clientID, clientSecret, version, c, http.FS(staticRoot))
+	staticRoot := http.FS(os.DirFS("static"))
+	proxy := api.NewProxy(espejoURL, clientID, clientSecret, version, c, staticRoot)
 	rl := middleware.NewRateLimiter(180, time.Minute)
 	handler := middleware.Logging(middleware.RequestID(rl.Middleware(proxy)))
 

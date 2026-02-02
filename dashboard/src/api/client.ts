@@ -9,10 +9,84 @@ export type Health = {
   cache_size_bytes?: number
 }
 
+export type AccessRequest = {
+  id: string
+  name: string
+  email: string
+  role?: string
+  organization?: string
+  message?: string
+  status: 'pending' | 'approved' | 'rejected'
+  created_at: string
+  updated_at: string
+  decision_at?: string
+  decision_by?: string
+  decision_note?: string
+  requester_ip?: string
+  user_agent?: string
+}
+
+export type AccessUser = {
+  id: string
+  request_id?: string
+  name: string
+  email: string
+  role?: string
+  organization?: string
+  status: 'active' | 'disabled'
+  access_code: string
+  created_at: string
+  updated_at: string
+  activated_at?: string
+  disabled_at?: string
+  approved_by?: string
+}
+
+export type AccessRequestInput = {
+  name: string
+  email: string
+  role?: string
+  organization?: string
+  message?: string
+}
+
+export type AccessDecisionInput = {
+  note?: string
+  decidedBy?: string
+}
+
+export type AccessListResponse<T> = {
+  items: T[]
+  total: number
+}
+
 export async function getHealth(): Promise<Health> {
   const r = await fetch(`${BASE}/api/health`)
   if (!r.ok) throw new Error('API no disponible')
   return r.json()
+}
+
+function adminHeaders(adminToken: string, adminName?: string) {
+  const headers: Record<string, string> = {
+    'X-Admin-Token': adminToken,
+  }
+  if (adminName?.trim()) {
+    headers['X-Admin-Name'] = adminName.trim()
+  }
+  return headers
+}
+
+async function parseError(r: Response, fallback: string) {
+  const ct = r.headers.get('content-type')
+  if (ct?.includes('application/json')) {
+    try {
+      const body = await r.json() as { message?: string; error?: string }
+      if (body.message || body.error) return body.message || body.error || fallback
+    } catch {
+      // ignore
+    }
+  }
+  return fallback
 }
 
 export async function search(q: string, max = 20): Promise<{ query: string; results: { title: string; url: string; snippet: string }[]; cached?: boolean }> {
@@ -85,5 +159,77 @@ export async function chat(message: string, contextUrl?: string): Promise<{ repl
 export async function chatHistory(): Promise<{ items: { id: string; role: string; preview: string; ts: string }[] }> {
   const r = await fetch(`${BASE}/api/chat/history`)
   if (!r.ok) throw new Error('Historial no disponible')
+  return r.json()
+}
+
+export async function createAccessRequest(input: AccessRequestInput): Promise<{ request: AccessRequest }> {
+  const r = await fetch(`${BASE}/api/access/requests`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  })
+  if (!r.ok) throw new Error(await parseError(r, 'No se pudo enviar la solicitud.'))
+  return r.json()
+}
+
+export async function listAccessRequests(adminToken: string, status?: string): Promise<AccessListResponse<AccessRequest>> {
+  if (!adminToken) throw new Error('Token admin requerido')
+  const qs = status ? `?status=${encodeURIComponent(status)}` : ''
+  const r = await fetch(`${BASE}/api/access/requests${qs}`, {
+    headers: adminHeaders(adminToken),
+  })
+  if (!r.ok) throw new Error(await parseError(r, 'No se pudo cargar la bandeja.'))
+  return r.json()
+}
+
+export async function approveAccessRequest(id: string, adminToken: string, input: AccessDecisionInput): Promise<{ request: AccessRequest; user: AccessUser }> {
+  if (!adminToken) throw new Error('Token admin requerido')
+  const r = await fetch(`${BASE}/api/access/requests/${encodeURIComponent(id)}/approve`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...adminHeaders(adminToken, input.decidedBy),
+    },
+    body: JSON.stringify({ note: input.note || '', decided_by: input.decidedBy || '' }),
+  })
+  if (!r.ok) throw new Error(await parseError(r, 'No se pudo aprobar la solicitud.'))
+  return r.json()
+}
+
+export async function rejectAccessRequest(id: string, adminToken: string, input: AccessDecisionInput): Promise<{ request: AccessRequest }> {
+  if (!adminToken) throw new Error('Token admin requerido')
+  const r = await fetch(`${BASE}/api/access/requests/${encodeURIComponent(id)}/reject`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...adminHeaders(adminToken, input.decidedBy),
+    },
+    body: JSON.stringify({ note: input.note || '', decided_by: input.decidedBy || '' }),
+  })
+  if (!r.ok) throw new Error(await parseError(r, 'No se pudo rechazar la solicitud.'))
+  return r.json()
+}
+
+export async function listAccessUsers(adminToken: string, status?: string): Promise<AccessListResponse<AccessUser>> {
+  if (!adminToken) throw new Error('Token admin requerido')
+  const qs = status ? `?status=${encodeURIComponent(status)}` : ''
+  const r = await fetch(`${BASE}/api/access/users${qs}`, {
+    headers: adminHeaders(adminToken),
+  })
+  if (!r.ok) throw new Error(await parseError(r, 'No se pudo cargar los usuarios.'))
+  return r.json()
+}
+
+export async function updateAccessUserStatus(id: string, status: 'active' | 'disabled', adminToken: string, adminName?: string): Promise<{ user: AccessUser }> {
+  if (!adminToken) throw new Error('Token admin requerido')
+  const r = await fetch(`${BASE}/api/access/users/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      ...adminHeaders(adminToken, adminName),
+    },
+    body: JSON.stringify({ status }),
+  })
+  if (!r.ok) throw new Error(await parseError(r, 'No se pudo actualizar el usuario.'))
   return r.json()
 }

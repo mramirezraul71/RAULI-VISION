@@ -1,3 +1,6 @@
+//go:build cgo
+// +build cgo
+
 package cache
 
 import (
@@ -10,9 +13,9 @@ import (
 )
 
 type Cache struct {
-	db   *sql.DB
-	mu   sync.RWMutex
-	ttl  time.Duration
+	db  *sql.DB
+	mu  sync.RWMutex
+	ttl time.Duration
 }
 
 func New(dbPath string) (*Cache, error) {

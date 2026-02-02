@@ -55,17 +55,23 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *Proxy) serveStatic(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path == "/" {
-		r.URL.Path = "/index.html"
+	if r.URL.Path == "" || r.URL.Path == "/" {
+		if file, err := p.static.Open("/index.html"); err == nil {
+			defer file.Close()
+			if data, err := io.ReadAll(file); err == nil {
+				w.Header().Set("Content-Type", "text/html; charset=utf-8")
+				w.WriteHeader(http.StatusOK)
+				w.Write(data)
+				return
+			}
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(staticFallbackHTML))
+		return
 	}
 	_, err := p.static.Open(r.URL.Path)
 	if err != nil {
-		if r.URL.Path == "/index.html" {
-			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(staticFallbackHTML))
-			return
-		}
 		http.NotFound(w, r)
 		return
 	}
@@ -73,9 +79,11 @@ func (p *Proxy) serveStatic(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *Proxy) serveAPI(w http.ResponseWriter, r *http.Request) {
-	key := cache.CacheKey(r.Method, r.URL.Path, r.URL.RawQuery)
-	if r.Method == http.MethodGet {
-		if data, ok := p.cache.Get(key); ok {
+	cacheable := r.Method == http.MethodGet && r.URL.Path != "/api/health" && !strings.HasPrefix(r.URL.Path, "/api/access")
+	cacheKey := ""
+	if cacheable {
+		cacheKey = cache.CacheKey(r.Method, r.URL.Path, r.URL.RawQuery)
+		if data, ok := p.cache.Get(cacheKey); ok {
 			w.Header().Set("Content-Type", "application/json; charset=utf-8")
 			w.Header().Set("X-Cache", "HIT")
 			w.Write(data)
@@ -94,15 +102,15 @@ func (p *Proxy) serveAPI(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	url := p.espejoURL + r.URL.Path
+	targetURL := p.espejoURL + r.URL.Path
 	if r.URL.RawQuery != "" {
-		url += "?" + r.URL.RawQuery
+		targetURL += "?" + r.URL.RawQuery
 	}
 	var bodyReader io.Reader
 	if r.Body != nil {
 		bodyReader = r.Body
 	}
-	req, err := http.NewRequest(r.Method, url, bodyReader)
+	req, err := http.NewRequest(r.Method, targetURL, bodyReader)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "internal", err.Error())
 		return
@@ -112,6 +120,12 @@ func (p *Proxy) serveAPI(w http.ResponseWriter, r *http.Request) {
 	}
 	req.Header.Set("Content-Type", r.Header.Get("Content-Type"))
 	req.Header.Set("Accept-Encoding", "br, gzip")
+	if adminToken := strings.TrimSpace(r.Header.Get("X-Admin-Token")); adminToken != "" {
+		req.Header.Set("X-Admin-Token", adminToken)
+	}
+	if adminName := strings.TrimSpace(r.Header.Get("X-Admin-Name")); adminName != "" {
+		req.Header.Set("X-Admin-Name", adminName)
+	}
 
 	req.Header.Set("X-Request-ID", r.Header.Get("X-Request-ID"))
 	resp, err := p.client.Do(req)
@@ -213,8 +227,8 @@ func (p *Proxy) serveAPI(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(resp.StatusCode)
 	w.Write(body)
 
-	if r.Method == http.MethodGet && resp.StatusCode == http.StatusOK && len(body) > 0 && len(body) < 500*1024 {
-		p.cache.Set(key, body, 1*time.Hour)
+	if cacheable && resp.StatusCode == http.StatusOK && len(body) > 0 && len(body) < 500*1024 {
+		p.cache.Set(cacheKey, body, 1*time.Hour)
 	}
 }
 

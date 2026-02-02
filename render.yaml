@@ -1,0 +1,36 @@
+services:
+  - type: web
+    name: espejo-backend
+    runtime: go
+    plan: starter
+    buildCommand: go build -o espejo ./cmd/server
+    startCommand: ./espejo
+    envVars:
+      - key: PORT
+        value: 8080
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ADMIN_TOKEN
+        generateValue: true
+      - key: VERSION
+        value: 1.0.0
+    healthCheckPath: /api/health
+    
+  - type: web
+    name: proxy-backend
+    runtime: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: python simple-server.py
+    envVars:
+      - key: PORT
+        value: 3000
+      - key: ESPEJO_URL
+        value: https://espejo-backend.onrender.com
+      - key: CLIENT_ID
+        generateValue: true
+      - key: CLIENT_SECRET
+        generateValue: true
+      - key: VERSION
+        value: 1.0.0
+    healthCheckPath: /api/health

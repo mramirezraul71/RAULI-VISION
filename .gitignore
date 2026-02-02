@@ -12,6 +12,7 @@ credenciales.txt
 *.exe
 *.sum
 espejo/espejo
+espejo/data/
 cliente-local/rauli-proxy
 cliente-local/rauli-proxy.exe
 cliente-local/*.db
@@ -26,6 +27,10 @@ dashboard/tsconfig.tsbuildinfo
 cliente-local/static/assets/
 cliente-local/static/workbox-*.js
 cliente-local/static/registerSW.js
+cliente-local/static/index.html
+cliente-local/static/sw.js
+cliente-local/static/manifest.webmanifest
+cliente-local/static/favicon.svg
 
 # IDE / OS
 .idea

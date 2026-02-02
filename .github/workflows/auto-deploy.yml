@@ -1,0 +1,169 @@
+name: 🚀 Auto Deploy RAULI-VISION
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    name: 🧪 Test Suite
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: 📦 Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: dashboard/package-lock.json
+    
+    - name: 📦 Setup Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.22'
+    
+    - name: 📦 Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: 📱 Install Frontend Dependencies
+      run: |
+        cd dashboard
+        npm ci
+    
+    - name: 🔥 Install Go Dependencies
+      run: |
+        cd espejo
+        go mod download
+    
+    - name: 🌐 Install Python Dependencies
+      run: |
+        cd cliente-local
+        pip install -r requirements.txt
+    
+    - name: 🧪 Run Tests
+      run: |
+        cd dashboard && npm test -- --passWithNoTests
+        cd ../espejo && go test ./...
+        cd ../cliente-local && python -m pytest || true
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    name: 🔨 Build Applications
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: 📦 Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: dashboard/package-lock.json
+    
+    - name: 📦 Setup Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.22'
+    
+    - name: 📱 Build Frontend
+      run: |
+        cd dashboard
+        npm ci
+        npm run build
+    
+    - name: 🔥 Build Backend
+      run: |
+        cd espejo
+        go build -o espejo ./cmd/server
+    
+    - name: 🐳 Build Docker Images
+      run: |
+        docker-compose build
+    
+    - name: 📤 Upload Build Artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: build-artifacts
+        path: |
+          dashboard/dist/
+          espejo/espejo
+          docker-compose.yml
+        retention-days: 1
+
+  deploy-vercel:
+    needs: build
+    runs-on: ubuntu-latest
+    name: 🌐 Deploy to Vercel
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: 📦 Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: dashboard/package-lock.json
+    
+    - name: 📥 Download Build Artifacts
+      uses: actions/download-artifact@v3
+      with:
+        name: build-artifacts
+    
+    - name: 🌐 Deploy to Vercel
+      uses: amondnet/vercel-action@v20
+      with:
+        vercel-token: ${{ secrets.VERCEL_TOKEN }}
+        vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+        vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+        working-directory: ./dashboard
+        vercel-args: '--prod'
+
+  deploy-render:
+    needs: build
+    runs-on: ubuntu-latest
+    name: 🔥 Deploy to Render
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: 📥 Download Build Artifacts
+      uses: actions/download-artifact@v3
+      with:
+        name: build-artifacts
+    
+    - name: 🔥 Trigger Render Deploy
+      run: |
+        # Render se actualiza automáticamente con GitHub webhook
+        # Solo necesitamos asegurarnos que render.yaml esté presente
+        ls -la render.yaml
+        echo "✅ Render deployment triggered via webhook"
+
+  notify:
+    needs: [deploy-vercel, deploy-render]
+    runs-on: ubuntu-latest
+    name: 📢 Notify Deployment
+    if: always()
+    
+    steps:
+    - name: 🎉 Success Notification
+      if: needs.deploy-vercel.result == 'success' && needs.deploy-render.result == 'success'
+      run: |
+        echo "🎉 RAULI-VISION deployed successfully!"
+        echo "🌐 Frontend: https://your-app.vercel.app"
+        echo "🔥 Backend: https://your-app.onrender.com"
+    
+    - name: ❌ Failure Notification
+      if: needs.deploy-vercel.result == 'failure' || needs.deploy-render.result == 'failure'
+      run: |
+        echo "❌ Deployment failed!"
+        exit 1

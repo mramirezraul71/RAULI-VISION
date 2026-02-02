@@ -6,6 +6,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/rauli-vision/espejo/internal/access"
 	"github.com/rauli-vision/espejo/internal/api"
 	"github.com/rauli-vision/espejo/internal/auth"
 	"github.com/rauli-vision/espejo/internal/chat"
@@ -24,19 +25,28 @@ func main() {
 	if v := os.Getenv("VERSION"); v != "" {
 		version = v
 	}
+	adminToken := os.Getenv("ADMIN_TOKEN")
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
+	}
+	accessStore := os.Getenv("ACCESS_STORE")
+	if accessStore == "" {
+		accessStore = "data/access-store.json"
 	}
 
 	authSvc := auth.New(jwtSecret)
 	searchSvc := search.New()
 	videoSvc := video.New()
 	chatSvc := chat.New()
+	accessSvc, err := access.New(accessStore)
+	if err != nil {
+		log.Fatalf("No se pudo iniciar el almacén de accesos: %v", err)
+	}
 	rl := middleware.NewRateLimiter(120, time.Minute) // 120 req/min por IP
 
 	mux := http.NewServeMux()
-	api.Register(mux, version, authSvc, searchSvc, videoSvc, chatSvc, rl)
+	api.Register(mux, version, authSvc, searchSvc, videoSvc, chatSvc, accessSvc, adminToken, rl)
 
 	addr := ":" + port
 	log.Printf("Espejo v%s escuchando en %s", version, addr)
