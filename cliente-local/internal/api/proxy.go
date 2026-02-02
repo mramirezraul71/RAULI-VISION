@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/andybalholm/brotli"
-	"github.com/rauli-vision/cliente-local/internal/cache"
+	"github.com/mramirezraul71/RAULI-VISION/cliente-local/internal/cache"
 )
 
 type Proxy struct {
