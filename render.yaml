@@ -7,6 +7,7 @@ services:
     name: espejo-backend
     runtime: go
     plan: starter
+    branch: master
     buildCommand: go mod download -C espejo && go build -C espejo -ldflags="-s -w" -o espejo/espejo ./cmd/server
     startCommand: ./espejo/espejo
     envVars:
@@ -24,6 +25,7 @@ services:
     name: proxy-backend
     runtime: go
     plan: starter
+    branch: master
     buildCommand: go mod download -C cliente-local && CGO_ENABLED=0 go build -C cliente-local -ldflags="-s -w" -o cliente-local/proxy ./cmd/proxy
     startCommand: ./cliente-local/proxy
     envVars:
