@@ -61,3 +61,23 @@ Si el sistema se vuelve lento por el plan **free** (cold starts, spin-down tras 
    - Requiere tarjeta en Billing del workspace.
 
 Tras el cambio, los servicios permanecen encendidos y evitan cold starts.
+
+---
+
+## Si el despliegue falla ("Despliegue fallido")
+
+Cuando **Espejo** o **Proxy** muestran "Despliegue fallido" en el Dashboard:
+
+1. **Ver el error concreto**  
+   - Dashboard → servicio (espejo-backend o proxy-backend) → pestaña **Logs** o **Events**.  
+   - En **Events** verás si falló en *Build* o en *Deploy*.  
+   - En **Logs** verás la salida del build (go build, docker build) o del arranque (./espejo, ./proxy).
+
+2. **Causas habituales**  
+   - **Espejo (Go):** dependencias no descargadas → en `render.yaml` el buildCommand debe incluir `go mod download &&` antes de `go build`.  
+   - **Proxy (Docker):** fallo de CGO/go-sqlite3 en el build → el Dockerfile instala `gcc` y `libc6-dev`; si falla, revisa el log de build.  
+   - **Health check:** si el build termina pero el deploy falla, puede ser que `/api/health` no responda a tiempo; en Render el servicio debe escuchar en `PORT` y responder 200 en `healthCheckPath`.
+
+3. **Tras corregir**  
+   - Haz commit + push a la rama que usa el Blueprint (p. ej. `master`).  
+   - Render hará sync y volverá a desplegar, o en Blueprint → **Manual sync**.
