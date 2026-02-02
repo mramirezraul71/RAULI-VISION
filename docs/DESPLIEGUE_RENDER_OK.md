@@ -19,6 +19,7 @@ Si ambos responden 200, verás **DESPLIEGUE RENDER OK**.
 - Si tus servicios en Render tienen otro nombre, edita `$urlEspejo` y `$urlProxy` en `scripts/verificar-render.ps1`.
 - **Autorización de upgrade:** El usuario autoriza subir al plan **Starter (~$7/mes por servicio)** si el sistema se vuelve lento (cold starts, spin-down tras inactividad). Ver sección [Upgrade a Starter](#upgrade-a-starter) más abajo.
 - Dashboard de Render: https://dashboard.render.com
+- **Notificaciones Telegram:** al redactar fixes, usar **ldflags** (L minúscula), no "Idflags".
 
 **Enlaces del despliegue (según render.yaml):**
 
