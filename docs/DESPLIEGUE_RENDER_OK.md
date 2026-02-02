@@ -75,7 +75,7 @@ Cuando **Espejo** o **Proxy** muestran "Despliegue fallido" en el Dashboard:
    - En **Logs** verás la salida del build (go build, docker build) o del arranque (./espejo, ./proxy).
 
 2. **Causas habituales**  
-   - **"cd: espejo / cliente-local: No such file or directory":** Con `rootDir` en render.yaml, Render **ya ejecuta** el build desde ese directorio. No uses `cd espejo` ni `cd cliente-local` en buildCommand/startCommand; quita el `cd` y deja solo `go mod download && go build ...` y `./espejo` o `./proxy`.  
+   - **"falta la entrada go.sum" / "cd: espejo: No such file":** Render puede ejecutar el build desde **raíz del repo** o desde rootDir. Solución aplicada: **sin rootDir**, build desde raíz con `go mod download -C espejo` y `go build -C espejo -o espejo/espejo ./cmd/server` (Go 1.20+). Así el módulo se resuelve siempre desde la raíz. `buildFilter.paths: [espejo/**]` limita el redeploy a cambios en espejo.  
    - **Espejo (Go):** dependencias no descargadas → el buildCommand debe incluir `go mod download &&` antes de `go build`.  
    - **Proxy (Go nativo):** usa `CGO_ENABLED=0` y cache en memoria; no requiere Docker ni `cd`.  
    - **Health check:** si el build termina pero el deploy falla, puede ser que `/api/health` no responda a tiempo; el servicio debe escuchar en `PORT` y responder 200 en `healthCheckPath`.
