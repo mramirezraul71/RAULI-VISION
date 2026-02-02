@@ -31,11 +31,8 @@ services:
       - key: PORT
         value: "3000"
       - key: ESPEJO_URL
-        fromService:
-          name: espejo-backend
-          type: web
-          property: hostport
-        # Si el hostport no se expande a URL, definir a mano: value: https://espejo-backend.onrender.com
+        value: https://espejo-backend.onrender.com
+        # Tras el primer deploy, si el nombre del servicio cambia, ajustar esta URL en el Dashboard de Render
       - key: CLIENT_ID
         generateValue: true
       - key: CLIENT_SECRET
