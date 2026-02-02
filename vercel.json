@@ -7,25 +7,9 @@
       "config": {
         "distDir": "dist"
       }
-    },
-    {
-      "src": "api/espejo/index.go",
-      "use": "@vercel/go"
-    },
-    {
-      "src": "api/proxy/index.go",
-      "use": "@vercel/go"
     }
   ],
   "routes": [
-    {
-      "src": "/api/espejo/(.*)",
-      "dest": "/api/espejo"
-    },
-    {
-      "src": "/api/proxy/(.*)",
-      "dest": "/api/proxy"
-    },
     {
       "src": "/api/(.*)",
       "dest": "/api/$1"
@@ -35,16 +19,14 @@
       "dest": "/dashboard/$1"
     }
   ],
-  "env": {
-    "ESPEJO_URL": "/api/espejo",
-    "PROXY_URL": "/api/proxy"
-  },
   "functions": {
     "api/espejo/index.go": {
-      "maxDuration": 10
+      "runtime": "go1.x",
+      "memory": 512
     },
     "api/proxy/index.go": {
-      "maxDuration": 10
+      "runtime": "go1.x",
+      "memory": 512
     }
   }
 }
