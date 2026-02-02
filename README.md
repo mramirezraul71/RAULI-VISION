@@ -16,8 +16,8 @@ RAULI-VISION es un sistema completo diseñado para operar eficientemente en ento
 
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Espejo (Go)   │◄──►│ Proxy (Python)  │◄──►│ Dashboard (React)│
-│   (Backend)     │    │  (Cache + CDN)  │    │   (PWA Frontend) │
+│   Espejo (Go)   │◄──►│ Proxy (Go)      │◄──►│ Dashboard (React)│
+│   (Backend)     │    │  (Cache + API)  │    │   (PWA Frontend) │
 │  Puerto 8080    │    │  Puerto 3000    │    │   Modo Offline   │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
 ```
@@ -25,7 +25,7 @@ RAULI-VISION es un sistema completo diseñado para operar eficientemente en ento
 ### Componentes
 
 - **🔥 Espejo** - Servidor Go con búsqueda, video, IA y compresión Brotli
-- **🌐 Cliente-local** - Proxy Python con caché SQLite y CDN integrado
+- **🌐 Cliente-local** - Proxy Go con caché SQLite; sirve dashboard y reenvía al espejo
 - **📱 Dashboard** - PWA React + TypeScript con modo offline
 - **🎵 CAMI Channel** - Sistema profesional de gestión musical
 
@@ -55,42 +55,38 @@ RAULI-VISION es un sistema completo diseñado para operar eficientemente en ento
 ## 🚀 Quick Start
 
 ### Prerrequisitos
-- Go 1.19+
+- Go 1.22+
 - Node.js 18+
-- Python 3.8+
 
 ### Instalación Rápida
 
 ```bash
 # Clonar el repositorio
-git clone https://github.com/tu-usuario/RAULI-VISION.git
+git clone https://github.com/mramirezraul71/RAULI-VISION.git
 cd RAULI-VISION
 
 # Opción 1: Todo en uno (PowerShell)
 .\scripts\run-all.ps1
 
 # Opción 2: Paso a paso
-# Terminal 1 - Backend
+# Terminal 1 - Espejo
 cd espejo
 go mod tidy
 go run ./cmd/server
 
-# Terminal 2 - Proxy
+# Terminal 2 - Proxy (cliente local)
 cd cliente-local
 go mod tidy
-python simple-server.py
+go run ./cmd/proxy
 
-# Terminal 3 - Frontend
-cd dashboard
-npm install
-npm run build
-npm run dev
+# Dashboard: http://localhost:3000 (el proxy sirve el estático; para React completo: build-dashboard-and-copy.ps1)
 ```
 
 ### Acceso
 - **Dashboard**: http://localhost:3000
-- **API Health**: http://localhost:8080/api/health
-- **Búsqueda**: http://localhost:8080/api/search?q=test
+- **API Health (proxy)**: http://localhost:3000/api/health
+- **API Health (espejo)**: http://localhost:8080/api/health
+- **Búsqueda**: http://localhost:3000/api/search?q=test
 
 ## 📚 Documentación
 
