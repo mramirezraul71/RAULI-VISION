@@ -43,6 +43,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("No se pudo iniciar el almacén de accesos: %v", err)
 	}
+	// Pocos usuarios, calidad: límite bajo por IP para evitar saturación y dar respuesta estable.
 	rl := middleware.NewRateLimiter(120, time.Minute) // 120 req/min por IP
 
 	mux := http.NewServeMux()

@@ -46,6 +46,7 @@ func main() {
 
 	staticRoot := http.FS(os.DirFS("static"))
 	proxy := api.NewProxy(espejoURL, clientID, clientSecret, version, c, staticRoot)
+	// Pocos usuarios, calidad: límite moderado por IP para servicio estable sin saturar.
 	rl := middleware.NewRateLimiter(180, time.Minute)
 	handler := middleware.Logging(middleware.RequestID(rl.Middleware(proxy)))
 
