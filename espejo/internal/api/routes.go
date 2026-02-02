@@ -4,14 +4,14 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/rauli-vision/espejo/internal/access"
-	"github.com/rauli-vision/espejo/internal/auth"
-	"github.com/rauli-vision/espejo/internal/cami"
-	"github.com/rauli-vision/espejo/internal/chat"
-	"github.com/rauli-vision/espejo/internal/feedback"
-	"github.com/rauli-vision/espejo/internal/middleware"
-	"github.com/rauli-vision/espejo/internal/search"
-	"github.com/rauli-vision/espejo/internal/video"
+	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/access"
+	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/auth"
+	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/cami"
+	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/chat"
+	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/feedback"
+	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/middleware"
+	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/search"
+	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/video"
 )
 
 func Register(mux *http.ServeMux, version string, authSvc *auth.Service, searchSvc *search.Service, videoSvc *video.Service, chatSvc *chat.Service, accessSvc *access.Service, adminToken string, rl *middleware.RateLimiter) {
