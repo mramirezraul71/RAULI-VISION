@@ -7,7 +7,7 @@ services:
     name: espejo-backend
     runtime: go
     rootDir: espejo
-    plan: starter
+    plan: free
     buildCommand: go build -o espejo ./cmd/server
     startCommand: ./espejo
     envVars:
@@ -26,7 +26,7 @@ services:
     runtime: docker
     dockerfilePath: cliente-local/Dockerfile
     dockerContext: cliente-local
-    plan: starter
+    plan: free
     envVars:
       - key: PORT
         value: "3000"
