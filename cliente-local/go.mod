@@ -1,4 +1,4 @@
-module github.com/rauli-vision/cliente-local
+module github.com/mramirezraul71/RAULI-VISION/cliente-local
 
 go 1.22
 
