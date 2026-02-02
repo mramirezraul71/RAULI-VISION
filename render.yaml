@@ -1,36 +1,45 @@
+# RAULI-VISION — Render Blueprint
+# Espejo: Go nativo. Proxy: Docker (Go con CGO/SQLite).
+# Tras el primer deploy, sustituir ESPEJO_URL del proxy por la URL pública del espejo si usas Vercel.
+
 services:
   - type: web
     name: espejo-backend
     runtime: go
+    rootDir: espejo
     plan: starter
     buildCommand: go build -o espejo ./cmd/server
     startCommand: ./espejo
     envVars:
       - key: PORT
-        value: 8080
+        value: "8080"
       - key: JWT_SECRET
         generateValue: true
       - key: ADMIN_TOKEN
         generateValue: true
       - key: VERSION
-        value: 1.0.0
+        value: "1.0.0"
     healthCheckPath: /api/health
-    
+
   - type: web
     name: proxy-backend
-    runtime: python
+    runtime: docker
+    dockerfilePath: cliente-local/Dockerfile
+    dockerContext: cliente-local
     plan: starter
-    buildCommand: pip install -r requirements.txt
-    startCommand: python simple-server.py
     envVars:
       - key: PORT
-        value: 3000
+        value: "3000"
       - key: ESPEJO_URL
-        value: https://espejo-backend.onrender.com
+        fromService:
+          name: espejo-backend
+          type: web
+          property: hostport
+        # Si el hostport no se expande a URL, definir a mano: value: https://espejo-backend.onrender.com
       - key: CLIENT_ID
         generateValue: true
       - key: CLIENT_SECRET
         generateValue: true
       - key: VERSION
-        value: 1.0.0
+        value: "1.0.0"
     healthCheckPath: /api/health
