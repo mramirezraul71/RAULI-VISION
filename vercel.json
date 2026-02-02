@@ -1,1 +1,50 @@
-{"version": 2, "builds": [{"src": "dashboard/package.json", "use": "@vercel/static-build", "config": {"distDir": "dist"}}], "routes": [{"src": "/api/(.*)", "dest": "https://proxy-backend.onrender.com/api/$1", "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"]}, {"src": "/auth/(.*)", "dest": "https://proxy-backend.onrender.com/auth/$1", "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"]}, {"src": "/(.*)", "dest": "/dashboard/$1"}], "env": {"VITE_API_URL": "https://proxy-backend.onrender.com"}, "headers": [{"source": "/api/(.*)", "headers": [{"key": "Access-Control-Allow-Origin", "value": "*"}, {"key": "Access-Control-Allow-Methods", "value": "GET, POST, PUT, DELETE, OPTIONS"}, {"key": "Access-Control-Allow-Headers", "value": "Content-Type, Authorization"}]}, {"source": "/static/(.*)", "headers": [{"key": "Cache-Control", "value": "public, max-age=31536000, immutable"}]}]}
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "dashboard/package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "dist"
+      }
+    },
+    {
+      "src": "api/espejo/index.go",
+      "use": "@vercel/go"
+    },
+    {
+      "src": "api/proxy/index.go",
+      "use": "@vercel/go"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/espejo/(.*)",
+      "dest": "/api/espejo"
+    },
+    {
+      "src": "/api/proxy/(.*)",
+      "dest": "/api/proxy"
+    },
+    {
+      "src": "/api/(.*)",
+      "dest": "/api/$1"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/dashboard/$1"
+    }
+  ],
+  "env": {
+    "ESPEJO_URL": "/api/espejo",
+    "PROXY_URL": "/api/proxy"
+  },
+  "functions": {
+    "api/espejo/index.go": {
+      "maxDuration": 10
+    },
+    "api/proxy/index.go": {
+      "maxDuration": 10
+    }
+  }
+}
