@@ -41,3 +41,22 @@ Cuando el script termine con **DESPLIEGUE RENDER OK**, todo el despliegue en Ren
 1. En https://dashboard.render.com revisa los nombres y URLs reales de los servicios.  
 2. Si son distintas, edita `scripts/verificar-render.ps1` y pon `$urlEspejo` y `$urlProxy` con las URLs que muestra Render.  
 3. Vuelve a ejecutar `.\scripts\verificar-render.ps1` hasta ver **DESPLIEGUE RENDER OK**.
+
+---
+
+## Upgrade a Starter (~$7/mes por servicio)
+
+Si el sistema se vuelve lento por el plan **free** (cold starts, spin-down tras 15 min de inactividad), está autorizado subir a **Starter**:
+
+1. **Desde el Dashboard de Render**  
+   - Entra a https://dashboard.render.com → Blueprint **rauli-vision** → Resources.  
+   - Para cada servicio (**espejo-backend**, **proxy-backend**): Settings → Instance Type → **Starter** → Save.  
+   - Requiere tarjeta en Billing del workspace.
+
+2. **Desde el repo (render.yaml)**  
+   - Cambiar en `render.yaml` cada `plan: free` por `plan: starter`.  
+   - Commit + push a la rama que usa el Blueprint (p. ej. `master`).  
+   - En Render: Blueprint → Manual sync (o esperar al auto-sync).  
+   - Requiere tarjeta en Billing del workspace.
+
+Tras el cambio, los servicios permanecen encendidos y evitan cold starts.
