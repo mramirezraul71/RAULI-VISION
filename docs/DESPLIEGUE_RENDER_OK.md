@@ -75,9 +75,10 @@ Cuando **Espejo** o **Proxy** muestran "Despliegue fallido" en el Dashboard:
    - En **Logs** verás la salida del build (go build, docker build) o del arranque (./espejo, ./proxy).
 
 2. **Causas habituales**  
-   - **Espejo (Go):** dependencias no descargadas → en `render.yaml` el buildCommand debe incluir `go mod download &&` antes de `go build`.  
-   - **Proxy (Docker):** fallo de CGO/go-sqlite3 en el build → el Dockerfile instala `gcc` y `libc6-dev`; si falla, revisa el log de build.  
-   - **Health check:** si el build termina pero el deploy falla, puede ser que `/api/health` no responda a tiempo; en Render el servicio debe escuchar en `PORT` y responder 200 en `healthCheckPath`.
+   - **"cd: espejo / cliente-local: No such file or directory":** Con `rootDir` en render.yaml, Render **ya ejecuta** el build desde ese directorio. No uses `cd espejo` ni `cd cliente-local` en buildCommand/startCommand; quita el `cd` y deja solo `go mod download && go build ...` y `./espejo` o `./proxy`.  
+   - **Espejo (Go):** dependencias no descargadas → el buildCommand debe incluir `go mod download &&` antes de `go build`.  
+   - **Proxy (Go nativo):** usa `CGO_ENABLED=0` y cache en memoria; no requiere Docker ni `cd`.  
+   - **Health check:** si el build termina pero el deploy falla, puede ser que `/api/health` no responda a tiempo; el servicio debe escuchar en `PORT` y responder 200 en `healthCheckPath`.
 
 3. **Tras corregir**  
    - Haz commit + push a la rama que usa el Blueprint (p. ej. `master`).  
