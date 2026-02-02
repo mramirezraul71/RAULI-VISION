@@ -8,8 +8,8 @@ services:
     runtime: go
     rootDir: espejo
     plan: starter
-    buildCommand: sh -c '([ -d espejo ] && cd espejo); go mod download && go build -ldflags="-s -w" -o espejo ./cmd/server'
-    startCommand: sh -c '([ -d espejo ] && cd espejo); ./espejo'
+    buildCommand: sh -c 'if [ -d espejo ]; then cd espejo; fi && go mod download && go build -ldflags="-s -w" -o espejo ./cmd/server'
+    startCommand: sh -c 'if [ -d espejo ]; then cd espejo; fi && ./espejo'
     envVars:
       - key: PORT
         value: "8080"
@@ -26,8 +26,8 @@ services:
     runtime: go
     rootDir: cliente-local
     plan: starter
-    buildCommand: sh -c '([ -d cliente-local ] && cd cliente-local); go mod download && CGO_ENABLED=0 go build -ldflags="-s -w" -o proxy ./cmd/proxy'
-    startCommand: sh -c '([ -d cliente-local ] && cd cliente-local); ./proxy'
+    buildCommand: sh -c 'if [ -d cliente-local ]; then cd cliente-local; fi && go mod download && CGO_ENABLED=0 go build -ldflags="-s -w" -o proxy ./cmd/proxy'
+    startCommand: sh -c 'if [ -d cliente-local ]; then cd cliente-local; fi && ./proxy'
     envVars:
       - key: PORT
         value: "3000"
