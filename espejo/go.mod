@@ -1,4 +1,4 @@
-module github.com/rauli-vision/espejo
+module github.com/mramirezraul71/RAULI-VISION/espejo
 
 go 1.22
 

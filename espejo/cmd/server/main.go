@@ -6,13 +6,13 @@ import (
 	"os"
 	"time"
 
-	"github.com/rauli-vision/espejo/internal/access"
-	"github.com/rauli-vision/espejo/internal/api"
-	"github.com/rauli-vision/espejo/internal/auth"
-	"github.com/rauli-vision/espejo/internal/chat"
-	"github.com/rauli-vision/espejo/internal/middleware"
-	"github.com/rauli-vision/espejo/internal/search"
-	"github.com/rauli-vision/espejo/internal/video"
+	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/access"
+	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/api"
+	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/auth"
+	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/chat"
+	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/middleware"
+	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/search"
+	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/video"
 )
 
 var version = "1.0.0"

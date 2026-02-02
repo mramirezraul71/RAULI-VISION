@@ -7,14 +7,14 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/rauli-vision/espejo/internal/access"
-	"github.com/rauli-vision/espejo/internal/auth"
-	"github.com/rauli-vision/espejo/internal/cami"
-	"github.com/rauli-vision/espejo/internal/chat"
-	"github.com/rauli-vision/espejo/internal/feedback"
-	"github.com/rauli-vision/espejo/internal/search"
-	"github.com/rauli-vision/espejo/internal/validate"
-	"github.com/rauli-vision/espejo/internal/video"
+	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/access"
+	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/auth"
+	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/cami"
+	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/chat"
+	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/feedback"
+	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/search"
+	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/validate"
+	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/video"
 )
 
 type Handlers struct {

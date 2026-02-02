@@ -1,13 +1,13 @@
 # RAULI-VISION — Render Blueprint
 # Espejo y Proxy: rootDir obligatorio para que Go resuelva módulo e internos en monorepo.
-# Rama: master (minúsculas). Tras el deploy, ESPEJO_URL debe apuntar a la URL del espejo.
+# Rama: main (correcta). Tras el deploy, ESPEJO_URL debe apuntar a la URL del espejo.
 
 services:
   - type: web
     name: espejo-backend
     runtime: go
     plan: starter
-    branch: master
+    branch: main
     rootDir: espejo
     buildCommand: go mod download && go build -ldflags="-s -w" -o espejo ./cmd/server
     startCommand: ./espejo
@@ -26,7 +26,7 @@ services:
     name: proxy-backend
     runtime: go
     plan: starter
-    branch: master
+    branch: main
     rootDir: cliente-local
     buildCommand: go mod download && CGO_ENABLED=0 go build -ldflags="-s -w" -o proxy ./cmd/proxy
     startCommand: ./proxy

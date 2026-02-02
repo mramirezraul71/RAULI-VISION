@@ -6,9 +6,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/rauli-vision/cliente-local/internal/api"
-	"github.com/rauli-vision/cliente-local/internal/cache"
-	"github.com/rauli-vision/cliente-local/internal/middleware"
+	"github.com/mramirezraul71/RAULI-VISION/cliente-local/internal/api"
+	"github.com/mramirezraul71/RAULI-VISION/cliente-local/internal/cache"
+	"github.com/mramirezraul71/RAULI-VISION/cliente-local/internal/middleware"
 )
 
 var version = "1.0.0"
