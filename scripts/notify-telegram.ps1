@@ -1,6 +1,6 @@
 # Notifica por Telegram (carga credenciales desde la Bóveda).
 # Uso: .\notify-telegram.ps1 "Mensaje aquí"
-# Requiere en credenciales: TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID (o BOT_TOKEN, CHAT_ID)
+# Bóveda: TELEGRAM_TOKEN o TELEGRAM_BOT_TOKEN; TELEGRAM_ADMIN_CHAT_ID, TELEGRAM_CHAT_ID o TELEGRAM_APPROVAL_CHAT_ID
 
 param([Parameter(Mandatory=$true)][string]$Message)
 
@@ -19,15 +19,15 @@ foreach ($path in $vaultPaths) {
         if ($_ -match '^\s*([^#=]+)=(.*)$') {
             $key = $matches[1].Trim()
             $val = $matches[2].Trim().Trim('"').Trim("'")
-            if ($key -match 'TELEGRAM.*BOT|BOT.*TOKEN') { $token = $val }
-            if ($key -match 'TELEGRAM.*CHAT|CHAT.*ID') { $chatId = $val }
+            if ($key -eq 'TELEGRAM_TOKEN' -or $key -eq 'TELEGRAM_BOT_TOKEN' -or $key -match 'BOT.*TOKEN') { $token = $val }
+            if ($key -eq 'TELEGRAM_ADMIN_CHAT_ID' -or $key -eq 'TELEGRAM_CHAT_ID' -or $key -eq 'TELEGRAM_APPROVAL_CHAT_ID' -or $key -match 'TELEGRAM.*CHAT.*ID') { $chatId = $val }
         }
     }
     if ($token -and $chatId) { break }
 }
 
 if (-not $token -or -not $chatId) {
-    Write-Warning "No se encontraron TELEGRAM_BOT_TOKEN y TELEGRAM_CHAT_ID en la Bóveda. Omitting Telegram."
+    Write-Warning "No se encontraron token/chat de Telegram en la Bóveda (TELEGRAM_TOKEN, TELEGRAM_ADMIN_CHAT_ID, etc.)."
     exit 0
 }
 
