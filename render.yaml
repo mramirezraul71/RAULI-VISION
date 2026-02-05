@@ -1,7 +1,7 @@
-# RAULI-VISION — Render Blueprint
-# Espejo y Proxy: rootDir obligatorio para que Go resuelva módulo e internos en monorepo.
-# Rama: main (correcta). Tras el deploy, ESPEJO_URL debe apuntar a la URL del espejo.
-
+# RAULI-VISION — Blueprint profesional (solo espejo)
+# Con Cloudflare Worker: puente-rauli-vision → espejo-backend
+# El proxy NO es necesario en cloud: Cloudflare aporta caché; evita fallos CGO/SQLite en Render.
+# Para uso local con caché: ejecutar proxy manualmente (cliente-local).
 services:
   - type: web
     name: espejo-backend
@@ -17,28 +17,6 @@ services:
       - key: JWT_SECRET
         generateValue: true
       - key: ADMIN_TOKEN
-        generateValue: true
-      - key: VERSION
-        value: "1.0.0"
-    healthCheckPath: /api/health
-
-  - type: web
-    name: proxy-backend
-    runtime: go
-    plan: starter
-    branch: main
-    rootDir: cliente-local
-    buildCommand: go mod download && CGO_ENABLED=0 go build -ldflags="-s -w" -o proxy ./cmd/proxy
-    startCommand: ./proxy
-    envVars:
-      - key: PORT
-        value: "3000"
-      - key: ESPEJO_URL
-        value: https://espejo-backend.onrender.com
-        # Tras el primer deploy, si el nombre del servicio cambia, ajustar esta URL en el Dashboard de Render
-      - key: CLIENT_ID
-        generateValue: true
-      - key: CLIENT_SECRET
         generateValue: true
       - key: VERSION
         value: "1.0.0"

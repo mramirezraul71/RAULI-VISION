@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react'
+import { API_BASE } from '../api/client'
 
 interface FeedbackData {
   id: string
@@ -161,7 +162,7 @@ export function FeedbackAI() {
     
     // Enviar a mi cerebro para procesamiento y reporte a Telegram
     try {
-      await fetch('/api/feedback/brain', {
+      await fetch(`${API_BASE}/api/feedback/brain`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(brainData)

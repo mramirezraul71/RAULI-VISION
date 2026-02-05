@@ -1,0 +1,18 @@
+# Bóveda RAULI-VISION (copiar a credenciales.txt - NO subir a Git)
+
+# Render - espejo-backend
+# API Key: https://dashboard.render.com/u/settings#api-keys
+# Se acepta RENDER_API_KEY o RENDER_TOKEN
+RENDER_API_KEY=
+# RENDER_TOKEN=   # alternativa
+# Deploy Hook: Dashboard → espejo-backend → Settings → Deploy Hook
+RENDER_DEPLOY_HOOK_ESPEJO=
+
+# Cloudflare Worker (deploy_network.js)
+# Token: https://dash.cloudflare.com/profile/api-tokens
+CLOUDFLARE_API_TOKEN=
+
+# Vercel (si usas deploy desde GitHub Actions)
+# VERCEL_TOKEN=
+# VERCEL_ORG_ID=
+# VERCEL_PROJECT_ID=

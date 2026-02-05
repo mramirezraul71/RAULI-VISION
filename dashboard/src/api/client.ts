@@ -1,4 +1,6 @@
-const BASE = ''
+// En dev: '' usa el proxy de Vite. En prod: VITE_API_URL apunta al puente Cloudflare.
+export const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '')
+const BASE = API_BASE
 
 export type Health = {
   status?: string
