@@ -11,6 +11,8 @@ credenciales.txt
 # Go
 *.exe
 *.sum
+!espejo/go.sum
+!cliente-local/go.sum
 espejo/espejo
 espejo/data/
 cliente-local/rauli-proxy
