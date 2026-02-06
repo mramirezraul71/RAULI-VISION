@@ -62,8 +62,21 @@ export type AccessListResponse<T> = {
   total: number
 }
 
+const FETCH_TIMEOUT = 15000 // 15s para no colgar (cold start Render ~90s pero fallar antes)
+
+async function fetchWithTimeout(url: string, opts: RequestInit = {}): Promise<Response> {
+  const ctrl = new AbortController()
+  const id = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT)
+  try {
+    const r = await fetch(url, { ...opts, signal: ctrl.signal })
+    return r
+  } finally {
+    clearTimeout(id)
+  }
+}
+
 export async function getHealth(): Promise<Health> {
-  const r = await fetch(`${BASE}/api/health`)
+  const r = await fetchWithTimeout(`${BASE}/api/health`)
   if (!r.ok) throw new Error('API no disponible')
   return r.json()
 }

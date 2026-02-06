@@ -1,0 +1,3 @@
+# Dependencias para subir AAB a Play Store via API
+google-auth>=2.0.0
+google-api-python-client>=2.0.0

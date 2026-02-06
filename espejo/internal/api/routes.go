@@ -43,6 +43,7 @@ func Register(mux *http.ServeMux, version string, authSvc *auth.Service, searchS
 
 	mux.HandleFunc("POST /auth/token", rateWrap(logWrap(h.PostAuthToken)))
 	mux.HandleFunc("GET /api/health", rateWrap(logWrap(h.GetHealth)))
+	mux.HandleFunc("GET /privacidad", rateWrap(logWrap(h.servePrivacidad)))
 	mux.HandleFunc("POST /api/access/requests", rateWrap(logWrap(wrap(h.PostAccessRequest))))
 	mux.HandleFunc("GET /api/access/requests", rateWrap(logWrap(wrap(h.ListAccessRequests))))
 	mux.HandleFunc("POST /api/access/requests/", rateWrap(logWrap(wrap(h.HandleAccessRequestAction))))

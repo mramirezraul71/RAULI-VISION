@@ -1,5 +1,10 @@
 # Bóveda RAULI-VISION (copiar a credenciales.txt - NO subir a Git)
 
+# Google Play - API para subir AAB
+# Crear cuenta de servicio en Google Cloud, activar Android Publisher API,
+# descargar JSON y dar acceso en Play Console > Usuarios y permisos
+GOOGLE_PLAY_CREDENTIALS_PATH=C:\ruta\al\service-account.json
+
 # Render - espejo-backend
 # API Key: https://dashboard.render.com/u/settings#api-keys
 # Se acepta RENDER_API_KEY o RENDER_TOKEN

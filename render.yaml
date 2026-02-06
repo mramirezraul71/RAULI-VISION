@@ -19,5 +19,5 @@ services:
       - key: ADMIN_TOKEN
         generateValue: true
       - key: VERSION
-        value: "1.0.0"
+        value: "2026.2.6"
     healthCheckPath: /api/health

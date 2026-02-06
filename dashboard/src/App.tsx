@@ -25,6 +25,9 @@ export default function App() {
     queryKey: ['health'],
     queryFn: getHealth,
     refetchInterval: 30000,
+    retry: 1,
+    retryDelay: 10000,
+    staleTime: 60000,
   })
 
   const { needRefresh, updateServiceWorker } = useRegisterSW({

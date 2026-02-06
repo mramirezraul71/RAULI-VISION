@@ -76,8 +76,10 @@ def main() -> int:
                 },
             )
             with urllib.request.urlopen(req, timeout=15) as r:
-                data = json.loads(r.read().decode())
-            svc = next((s for s in data if s.get("name") == "espejo-backend"), None)
+                raw = json.loads(r.read().decode())
+            items = raw.get("items", raw) if isinstance(raw, dict) else (raw if isinstance(raw, list) else [])
+            norm = [x.get("service", x) if isinstance(x, dict) and "service" in x else x for x in items]
+            svc = next((s for s in norm if isinstance(s, dict) and s.get("name") == "espejo-backend"), None)
             if not svc:
                 print("No se encontró espejo-backend. ¿Ya conectaste el Blueprint?", file=sys.stderr)
                 print("Ver RENDER_SETUP_ESPEJO.md", file=sys.stderr)

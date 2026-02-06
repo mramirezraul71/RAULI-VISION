@@ -11,7 +11,7 @@ import (
 	"github.com/mramirezraul71/RAULI-VISION/cliente-local/internal/middleware"
 )
 
-var version = "1.0.0"
+var version = "2026.2.6"
 
 func main() {
 	espejoURL := os.Getenv("ESPEJO_URL")

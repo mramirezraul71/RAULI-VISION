@@ -1,7 +1,7 @@
 {
   "name": "rauli-vision-dashboard",
   "private": true,
-  "version": "1.0.0",
+  "version": "2026.2.6",
   "type": "module",
   "scripts": {
     "dev": "vite",

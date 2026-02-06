@@ -1,0 +1,8 @@
+# RAULI-VISION — Correos para Pruebas (Play Store)
+# Añadir en Google Play Console > Pruebas internas/cerradas > Lista de correos
+
+mramirezraul71@gmail.com
+lisetmoralesl83@gmail.com
+mraulyamil@gmail.com
+barbarakamila166@gmail.com
+igarcellrodriguez@gmail.com

@@ -59,6 +59,28 @@ func (h *Handlers) GetHealth(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
+func (h *Handlers) servePrivacidad(w http.ResponseWriter, r *http.Request) {
+	html := `<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Política de Privacidad - RAULI-VISION</title></head>
+<body>
+<h1>Política de Privacidad - RAULI-VISION</h1>
+<p><strong>Última actualización:</strong> Febrero 2026</p>
+<h2>1. Información que recopilamos</h2>
+<p>RAULI-VISION no recopila datos personales identificables. La aplicación funciona principalmente de forma local y utiliza conexiones a servicios externos (búsqueda, proxy) sin almacenar información personal del usuario.</p>
+<h2>2. Uso de datos</h2>
+<p>No recopilamos, almacenamos ni compartimos datos personales con terceros. El caché local se utiliza solo para mejorar el rendimiento y reducir el consumo de datos.</p>
+<h2>3. Permisos</h2>
+<p>La aplicación solicita permiso de Internet para realizar búsquedas y conectar con los servicios necesarios. No accedemos a contactos, ubicación ni otros datos sensibles.</p>
+<h2>4. Contacto</h2>
+<p>Para consultas: mramirezraul71@gmail.com</p>
+</body>
+</html>`
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(html))
+}
+
 func (h *Handlers) PostAccessRequest(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)

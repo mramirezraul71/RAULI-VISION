@@ -2,6 +2,32 @@
 
 ## 🚀 Scripts Principales
 
+### `cadena_completa.py` / `CADENA_COMPLETA.bat`
+**Cadena completa: bump → build → AAB → (opcional) push**
+
+```bash
+# Bump + build web + sync + AAB (desde raíz)
+python scripts/cadena_completa.py
+
+# + git push
+python scripts/cadena_completa.py --push
+
+# + deploy-network + push
+python scripts/cadena_completa.py --todo
+
+# Solo build (sin bump)
+python scripts/cadena_completa.py --solo-build
+
+# Versión con fecha (YYYY.MM.DD)
+python scripts/cadena_completa.py --today
+```
+
+O desde raíz: `CADENA_COMPLETA.bat [--push|--todo|--solo-build|--today]`
+
+**Requiere:** Node, npm, JDK 17+ (JAVA_HOME), keystore para AAB firmado.
+
+---
+
 ### `auto-update.ps1`
 **Actualización completa automatizada**
 ```powershell

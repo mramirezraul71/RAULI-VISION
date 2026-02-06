@@ -15,7 +15,7 @@ import (
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/video"
 )
 
-var version = "1.0.0"
+var version = "2026.2.6"
 
 func main() {
 	jwtSecret := os.Getenv("JWT_SECRET")
