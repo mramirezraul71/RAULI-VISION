@@ -10,6 +10,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'prompt',
+      devOptions: { enabled: false },
       workbox: { globPatterns: ['**/*.{js,css,html,ico,png,svg}'] },
       manifest: {
         name: 'RAULI-VISION',
