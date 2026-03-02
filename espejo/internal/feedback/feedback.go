@@ -65,6 +65,7 @@ type TelegramReport struct {
 type Service struct {
 	telegramBotToken string
 	telegramChatID   int64
+	atlasBaseURL     string
 }
 
 func New() *Service {
@@ -85,6 +86,7 @@ func New() *Service {
 	return &Service{
 		telegramBotToken: botToken,
 		telegramChatID:   chatID,
+		atlasBaseURL:     strings.TrimRight(strings.TrimSpace(os.Getenv("ATLAS_BASE_URL")), "/"),
 	}
 }
 
@@ -100,20 +102,34 @@ func (s *Service) ProcessFeedback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Procesar con mi cerebro AI
-	log.Printf("🧠 Recibido feedback de mi cerebro: %s", brainData.Feedback.Title)
+	log.Printf("🧠 Recibido feedback en RAULI-VISION: %s", brainData.Feedback.Title)
 
-	// Análisis profundo y corrección automática
-	analysisResult, err := s.analyzeWithMyBrain(brainData)
-	if err != nil {
-		log.Printf("❌ Error en análisis cerebral: %v", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+	analysisResult := brainData.Analysis
+	if analysisResult.DetectedIssue == "" {
+		analysisResult = AIAnalysis{
+			DetectedIssue:     brainData.Feedback.Title,
+			RootCause:         "Pendiente de análisis profundo",
+			RecommendedAction: "Evaluar y decidir en ATLAS",
+			AutoFix:           false,
+			Priority:          s.calculatePriority(brainData.Feedback.Severity),
+			EstimatedTime:     "Pendiente",
+		}
 	}
 
-	// Aplicar correcciones automáticamente
-	if analysisResult.AutoFix {
-		if err := s.applyAutomaticFixes(analysisResult); err != nil {
+	decision, err := s.requestAtlasDecision(brainData, analysisResult)
+	if err != nil {
+		log.Printf("⚠️ Atlas decision fallback local: %v", err)
+		decision = &AtlasFeedbackDecision{
+			Decision:              "wait_owner_approval",
+			Status:                "pending_owner_approval",
+			AutoExecute:           false,
+			RequiresOwnerApproval: true,
+			UserMessage:           "ATLAS no respondió en este momento. El caso quedó pendiente para aprobación del Owner.",
+		}
+	}
+
+	if decision.AutoExecute && analysisResult.AutoFix {
+		if err := s.applyAutomaticFixes(&analysisResult); err != nil {
 			log.Printf("⚠️ Error aplicando correcciones: %v", err)
 		} else {
 			log.Printf("✅ Correcciones aplicadas exitosamente")
@@ -122,7 +138,7 @@ func (s *Service) ProcessFeedback(w http.ResponseWriter, r *http.Request) {
 
 	// Canal principal: Atlas. Telegram directo queda opcional para compatibilidad.
 	if strings.ToLower(strings.TrimSpace(os.Getenv("FEEDBACK_DIRECT_TELEGRAM_ENABLED"))) == "true" {
-		if err := s.sendTelegramReport(brainData, analysisResult); err != nil {
+		if err := s.sendTelegramReport(brainData, &analysisResult); err != nil {
 			log.Printf("⚠️ Error enviando reporte a Telegram: %v", err)
 		} else {
 			log.Printf("📱 Reporte enviado a Telegram exitosamente")
@@ -130,21 +146,74 @@ func (s *Service) ProcessFeedback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	atlas.Emit("Feedback AI procesado en RAULI-VISION", "med", "rauli-vision.feedback", map[string]interface{}{
-		"feedback_id": brainData.Feedback.ID,
-		"type":        brainData.Feedback.Type,
-		"severity":    brainData.Feedback.Severity,
-		"title":       brainData.Feedback.Title,
-		"auto_fix":    analysisResult.AutoFix,
+		"feedback_id":  brainData.Feedback.ID,
+		"type":         brainData.Feedback.Type,
+		"severity":     brainData.Feedback.Severity,
+		"title":        brainData.Feedback.Title,
+		"auto_fix":     analysisResult.AutoFix,
+		"atlas_action": decision.Decision,
+		"approval_id":  decision.ApprovalID,
+		"status":       decision.Status,
 	})
 
 	// Responder al cliente
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"success":   true,
-		"message":   "Feedback procesado por IA",
-		"analysis":  analysisResult,
-		"timestamp": time.Now().Format(time.RFC3339),
+		"success":    true,
+		"message":    decision.UserMessage,
+		"analysis":   analysisResult,
+		"decision":   decision.Decision,
+		"status":     decision.Status,
+		"approvalId": decision.ApprovalID,
+		"timestamp":  time.Now().Format(time.RFC3339),
 	})
+}
+
+type AtlasFeedbackDecision struct {
+	Decision              string `json:"decision"`
+	Status                string `json:"status"`
+	AutoExecute           bool   `json:"auto_execute"`
+	RequiresOwnerApproval bool   `json:"requires_owner_approval"`
+	ApprovalID            string `json:"approval_id"`
+	UserMessage           string `json:"user_message"`
+}
+
+func (s *Service) requestAtlasDecision(brainData BrainData, analysis AIAnalysis) (*AtlasFeedbackDecision, error) {
+	base := strings.TrimSpace(s.atlasBaseURL)
+	if base == "" {
+		base = "http://127.0.0.1:8791"
+	}
+	reqBody := map[string]interface{}{
+		"source_app": "rauli-vision",
+		"feedback":   brainData.Feedback,
+		"analysis":   analysis,
+	}
+	bodyBytes, _ := json.Marshal(reqBody)
+	req, err := http.NewRequest("POST", base+"/api/feedback/decide", bytes.NewReader(bodyBytes))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	client := &http.Client{Timeout: 20 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("atlas feedback decide status=%d", resp.StatusCode)
+	}
+	var out struct {
+		OK bool `json:"ok"`
+		AtlasFeedbackDecision
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return nil, err
+	}
+	if !out.OK {
+		return nil, fmt.Errorf("atlas decision not ok")
+	}
+	return &out.AtlasFeedbackDecision, nil
 }
 
 func (s *Service) analyzeWithMyBrain(brainData BrainData) (*AIAnalysis, error) {
