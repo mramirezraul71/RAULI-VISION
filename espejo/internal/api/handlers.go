@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/access"
+	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/atlas"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/auth"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/cami"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/chat"
@@ -92,6 +93,11 @@ func (h *Handlers) PostAccessRequest(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad_request", "message": err.Error()})
 		return
 	}
+	atlas.Emit("Solicitud de acceso creada en RAULI-VISION", "med", "rauli-vision.access", map[string]interface{}{
+		"request_id": request.ID,
+		"role":       request.Role,
+		"source_ip":  request.RequesterIP,
+	})
 	writeJSON(w, http.StatusCreated, map[string]interface{}{"request": request})
 }
 
@@ -264,6 +270,12 @@ func (h *Handlers) PostVideoRequest(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal", "message": err.Error()})
 		return
 	}
+	atlas.Emit("Solicitud de video registrada en RAULI-VISION", "low", "rauli-vision.video", map[string]interface{}{
+		"video_id": id,
+		"job_id":   jobID,
+		"quality":  body.Quality,
+		"status":   status,
+	})
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"job_id":  jobID,
 		"status":  status,

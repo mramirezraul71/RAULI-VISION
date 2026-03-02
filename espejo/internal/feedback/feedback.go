@@ -8,7 +8,10 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
+
+	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/atlas"
 )
 
 type FeedbackData struct {
@@ -117,12 +120,22 @@ func (s *Service) ProcessFeedback(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Enviar reporte a Telegram
-	if err := s.sendTelegramReport(brainData, analysisResult); err != nil {
-		log.Printf("⚠️ Error enviando reporte a Telegram: %v", err)
-	} else {
-		log.Printf("📱 Reporte enviado a Telegram exitosamente")
+	// Canal principal: Atlas. Telegram directo queda opcional para compatibilidad.
+	if strings.ToLower(strings.TrimSpace(os.Getenv("FEEDBACK_DIRECT_TELEGRAM_ENABLED"))) == "true" {
+		if err := s.sendTelegramReport(brainData, analysisResult); err != nil {
+			log.Printf("⚠️ Error enviando reporte a Telegram: %v", err)
+		} else {
+			log.Printf("📱 Reporte enviado a Telegram exitosamente")
+		}
 	}
+
+	atlas.Emit("Feedback AI procesado en RAULI-VISION", "med", "rauli-vision.feedback", map[string]interface{}{
+		"feedback_id": brainData.Feedback.ID,
+		"type":        brainData.Feedback.Type,
+		"severity":    brainData.Feedback.Severity,
+		"title":       brainData.Feedback.Title,
+		"auto_fix":    analysisResult.AutoFix,
+	})
 
 	// Responder al cliente
 	w.Header().Set("Content-Type", "application/json")
