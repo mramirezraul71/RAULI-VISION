@@ -51,6 +51,20 @@ export function VideoPage() {
     return list.results.find((item) => item.id === selectedId) ?? null
   }, [selectedId, list])
 
+  const groupedChannels = useMemo(() => {
+    const groups = new Map<string, NonNullable<typeof list>['results']>()
+    for (const item of list?.results ?? []) {
+      const category = (item.category || 'General').trim() || 'General'
+      const existing = groups.get(category)
+      if (existing) {
+        existing.push(item)
+      } else {
+        groups.set(category, [item])
+      }
+    }
+    return Array.from(groups.entries()).sort((a, b) => a[0].localeCompare(b[0]))
+  }, [list])
+
   return (
     <div className="space-y-6">
       <section className="rounded-xl border border-[rgba(56,139,253,0.3)] bg-[rgba(22,27,34,0.85)] p-5 backdrop-blur">
@@ -91,29 +105,37 @@ export function VideoPage() {
       <section className="rounded-xl border border-[rgba(56,139,253,0.3)] bg-[rgba(22,27,34,0.85)] p-5 backdrop-blur">
         {listLoading && <Skeleton />}
         {list && (
-          <ul className="space-y-2">
-            {list.results.map((v) => (
-              <li
-                key={v.id}
-                className={`rounded-lg border p-3 cursor-pointer transition ${selectedId === v.id ? 'border-accent bg-accent/10' : 'border-[rgba(56,139,253,0.2)] hover:border-accent/50'}`}
-                onClick={() => {
-                  setSelectedId(v.id)
-                }}
-              >
-                <span className="font-medium block truncate">{v.title}</span>
-                <span className="text-muted text-sm">
-                  {v.channel}
-                  {v.duration_sec > 0 ? ` · ${formatDuration(v.duration_sec)}` : ' · En vivo'}
-                  {v.category ? ` · ${v.category}` : ''}
-                </span>
-                <div className="mt-2 flex items-center gap-2 text-xs">
-                  <span className={`rounded-full px-2 py-0.5 ${v.cuba_ready ? 'bg-green-500/15 text-green-300' : 'bg-yellow-500/15 text-yellow-300'}`}>
-                    {v.cuba_ready ? 'Listo para Cuba' : 'Verificar ruta'}
-                  </span>
+          <div className="space-y-4">
+            {groupedChannels.map(([category, channels]) => (
+              <div key={category}>
+                <div className="mb-2 inline-flex items-center rounded-full border border-[rgba(56,139,253,0.35)] bg-[rgba(56,139,253,0.12)] px-3 py-1 text-xs font-semibold text-accent">
+                  {category} ({channels.length})
                 </div>
-              </li>
+                <ul className="space-y-2">
+                  {channels.map((v) => (
+                    <li
+                      key={v.id}
+                      className={`rounded-lg border p-3 cursor-pointer transition ${selectedId === v.id ? 'border-accent bg-accent/10' : 'border-[rgba(56,139,253,0.2)] hover:border-accent/50'}`}
+                      onClick={() => {
+                        setSelectedId(v.id)
+                      }}
+                    >
+                      <span className="font-medium block truncate">{v.title}</span>
+                      <span className="text-muted text-sm">
+                        {v.channel}
+                        {v.duration_sec > 0 ? ` · ${formatDuration(v.duration_sec)}` : ' · En vivo'}
+                      </span>
+                      <div className="mt-2 flex items-center gap-2 text-xs">
+                        <span className={`rounded-full px-2 py-0.5 ${v.cuba_ready ? 'bg-green-500/15 text-green-300' : 'bg-yellow-500/15 text-yellow-300'}`}>
+                          {v.cuba_ready ? 'Listo para Cuba' : 'Verificar ruta'}
+                        </span>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             ))}
-          </ul>
+          </div>
         )}
         {!listLoading && list && list.results.length === 0 && (
           <p className="text-sm text-muted">No hay canales para ese filtro. Pruebe con "Ver todo".</p>
