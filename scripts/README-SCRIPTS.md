@@ -2,6 +2,37 @@
 
 ## 🚀 Scripts Principales
 
+### `check-tv-channels.ps1`
+**Chequeo operativo de canales de TV de RAULI-VISION**
+```powershell
+# Verificacion por ruta optimizada para Cuba
+./scripts/check-tv-channels.ps1 -ApiBase "http://localhost:3000" -Mode cuba -Max 12
+
+# Verificacion directa (sin proxy Cuba)
+./scripts/check-tv-channels.ps1 -ApiBase "http://localhost:3000" -Mode direct -Max 12
+```
+
+**Salida:**
+- Tabla con `id`, canal, estado HTTP, latencia y bandera `cuba_ready`.
+- Reporte JSON en `logs/tv_channels_health_yyyyMMdd_HHmmss.json`.
+- `exit code 2` si 0/total canales estan accesibles.
+
+### `install-professional.ps1`
+**Instalacion profesional (build + tests + smoke checks)**
+```powershell
+# Flujo recomendado completo
+./scripts/install-professional.ps1 -ApiBase "http://localhost:3000"
+
+# Si ya compilo antes
+./scripts/install-professional.ps1 -SkipBuild
+```
+
+**Incluye:**
+- `go test` en espejo y proxy.
+- `npm run build` del dashboard y copia a `cliente-local/static`.
+- Validacion `GET /api/health`.
+- Verificacion de canales TV (`check-tv-channels.ps1`).
+
 ### `auto-update.ps1`
 **Actualización completa automatizada**
 ```powershell

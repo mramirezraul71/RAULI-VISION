@@ -50,6 +50,7 @@ func Register(mux *http.ServeMux, version string, authSvc *auth.Service, searchS
 	mux.HandleFunc("PUT /api/access/users/", rateWrap(logWrap(wrap(h.HandleAccessUserAction))))
 	mux.HandleFunc("GET /api/search", chain(h.getSearch))
 	mux.HandleFunc("GET /api/video/search", chain(h.getVideoSearch))
+	mux.HandleFunc("GET /api/video/channels/health", chain(h.getVideoChannelsHealth))
 	mux.HandleFunc("/api/video/", chain(h.serveVideo))
 	mux.HandleFunc("POST /api/video/", chain(h.serveVideoPost))
 	mux.HandleFunc("POST /api/chat", chain(h.postChat))
@@ -77,6 +78,9 @@ func Register(mux *http.ServeMux, version string, authSvc *auth.Service, searchS
 
 func (h *Handlers) getSearch(w http.ResponseWriter, r *http.Request)      { h.GetSearch(w, r) }
 func (h *Handlers) getVideoSearch(w http.ResponseWriter, r *http.Request) { h.GetVideoSearch(w, r) }
+func (h *Handlers) getVideoChannelsHealth(w http.ResponseWriter, r *http.Request) {
+	h.GetVideoChannelsHealth(w, r)
+}
 func (h *Handlers) postChat(w http.ResponseWriter, r *http.Request)       { h.PostChat(w, r) }
 func (h *Handlers) getChatHistory(w http.ResponseWriter, r *http.Request) { h.GetChatHistory(w, r) }
 

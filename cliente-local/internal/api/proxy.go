@@ -79,7 +79,14 @@ func (p *Proxy) serveStatic(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *Proxy) serveAPI(w http.ResponseWriter, r *http.Request) {
-	cacheable := r.Method == http.MethodGet && r.URL.Path != "/api/health" && !strings.HasPrefix(r.URL.Path, "/api/access")
+	isDynamicVideoPath := strings.HasPrefix(r.URL.Path, "/api/video/") &&
+		(strings.HasSuffix(r.URL.Path, "/stream") ||
+			strings.HasSuffix(r.URL.Path, "/status") ||
+			strings.HasSuffix(r.URL.Path, "/channels/health"))
+	cacheable := r.Method == http.MethodGet &&
+		r.URL.Path != "/api/health" &&
+		!strings.HasPrefix(r.URL.Path, "/api/access") &&
+		!isDynamicVideoPath
 	cacheKey := ""
 	if cacheable {
 		cacheKey = cache.CacheKey(r.Method, r.URL.Path, r.URL.RawQuery)
@@ -211,7 +218,10 @@ func (p *Proxy) serveAPI(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for k, v := range resp.Header {
-		if strings.ToLower(k) == "content-encoding" {
+		lk := strings.ToLower(k)
+		// El proxy puede descomprimir el cuerpo; en ese caso no debemos
+		// reenviar cabeceras de framing/encoding del upstream.
+		if lk == "content-encoding" || lk == "content-length" || lk == "transfer-encoding" || lk == "connection" {
 			continue
 		}
 		for _, vv := range v {

@@ -1,6 +1,7 @@
 package validate
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -15,7 +16,7 @@ func TestSearchQuery(t *testing.T) {
 		{"blank", "   ", false, ""},
 		{"simple", "hello", true, "hello"},
 		{"trimmed", "  world  ", true, "world"},
-		{"max len truncate", string(make([]byte, MaxQueryLen+10)), true, ""}, // wantQ empty = only check len(got)==MaxQueryLen below
+		{"max len truncate", strings.Repeat("x", MaxQueryLen+10), true, ""}, // wantQ empty = only check len(got)==MaxQueryLen below
 		{"control chars", "a\x00b\tc", true, "ab\tc"},
 	}
 	for _, tt := range tests {

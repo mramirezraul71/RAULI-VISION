@@ -1,0 +1,26 @@
+[
+  {
+    "id": "rtve_24h",
+    "title": "Canal 24 Horas",
+    "channel": "RTVE",
+    "category": "Noticias",
+    "description": "Canal de noticias 24/7 de RTVE.",
+    "url": "https://www.rtve.es/play/videos/directo/canales-lineales/24h/",
+    "fallback_url": "https://www.youtube.com/@24horasrtve/live",
+    "cuba_ready": true,
+    "priority": 1,
+    "tags": ["noticias", "espana", "24h"]
+  },
+  {
+    "id": "dw_espanol",
+    "title": "DW Espanol",
+    "channel": "Deutsche Welle",
+    "category": "Noticias",
+    "description": "Cobertura internacional en espanol.",
+    "url": "https://www.dw.com/es/tv/directo/s-100825",
+    "fallback_url": "https://www.youtube.com/@dwespanol/live",
+    "cuba_ready": true,
+    "priority": 2,
+    "tags": ["internacional", "noticias"]
+  }
+]

@@ -294,7 +294,22 @@ func (h *Handlers) GetVideoStream(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not_found", "message": "id requerido"})
 		return
 	}
-	writeJSON(w, http.StatusNotImplemented, map[string]string{"error": "not_implemented", "message": "Stream en desarrollo; use descarga cuando el video esté listo."})
+	mode := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("mode")))
+	cubaMode := mode == "cuba" || mode == "cu" || mode == "proxy"
+	target, ok := h.Video.StreamURL(id, cubaMode)
+	if !ok || strings.TrimSpace(target) == "" {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not_found", "message": "canal no disponible"})
+		return
+	}
+	if strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("format")), "json") {
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"id":         id,
+			"mode":       map[bool]string{true: "cuba", false: "direct"}[cubaMode],
+			"stream_url": target,
+		})
+		return
+	}
+	http.Redirect(w, r, target, http.StatusTemporaryRedirect)
 }
 
 func (h *Handlers) GetVideoStatus(w http.ResponseWriter, r *http.Request) {
@@ -315,6 +330,19 @@ func (h *Handlers) GetVideoStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, st)
+}
+
+func (h *Handlers) GetVideoChannelsHealth(w http.ResponseWriter, r *http.Request) {
+	max, _ := strconv.Atoi(strings.TrimSpace(r.URL.Query().Get("max")))
+	mode := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("mode")))
+	cubaMode := mode == "cuba" || mode == "cu" || mode == "proxy"
+	data, err := h.Video.ChannelsHealthJSON(max, cubaMode)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal", "message": err.Error()})
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(data)
 }
 
 func (h *Handlers) PostChat(w http.ResponseWriter, r *http.Request) {

@@ -12,7 +12,7 @@ const (
 	MaxURLLen     = 2048
 )
 
-var safeURLScheme = regexp.MustCompile(`^(https?|ftp):`)
+var safeURLScheme = regexp.MustCompile(`^(https?|ftp)$`)
 
 func SearchQuery(q string) (string, bool) {
 	q = strings.TrimSpace(q)

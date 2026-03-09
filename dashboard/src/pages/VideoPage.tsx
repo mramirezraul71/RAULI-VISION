@@ -1,6 +1,6 @@
-import { useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { videoSearch, videoMeta, videoRequest, videoStatus } from '../api/client'
+﻿import { useEffect, useMemo, useState } from 'react'
+import { useMutation, useQuery } from '@tanstack/react-query'
+import { videoChannelsHealth, videoMeta, videoSearch } from '../api/client'
 
 function Skeleton() {
   return (
@@ -22,66 +22,75 @@ export function VideoPage() {
   const [q, setQ] = useState('')
   const [query, setQuery] = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [jobId, setJobId] = useState<string | null>(null)
-  const queryClient = useQueryClient()
 
   const { data: list, isFetching: listLoading } = useQuery({
     queryKey: ['videoSearch', query],
-    queryFn: () => videoSearch(query, 15),
-    enabled: query.length > 0,
+    queryFn: () => videoSearch(query, 30),
+    staleTime: 60_000,
   })
 
   const { data: meta } = useQuery({
     queryKey: ['videoMeta', selectedId],
     queryFn: () => videoMeta(selectedId!),
     enabled: !!selectedId,
+    staleTime: 60_000,
   })
 
-  const requestMutation = useMutation({
-    mutationFn: ({ id, quality }: { id: string; quality: string }) => videoRequest(id, quality),
-    onSuccess: (_, { id }) => {
-      setJobId(_.job_id)
-      queryClient.invalidateQueries({ queryKey: ['videoMeta', id] })
-    },
+  const healthMutation = useMutation({
+    mutationFn: () => videoChannelsHealth(12, 'cuba'),
   })
 
-  const { data: status } = useQuery({
-    queryKey: ['videoStatus', selectedId, jobId],
-    queryFn: () => videoStatus(selectedId!, jobId!),
-    enabled: !!selectedId && !!jobId,
-    refetchInterval: (query) => {
-      const d = (query as { state?: { data?: { status?: string } } }).state?.data
-      return d?.status === 'ready' || d?.status === 'failed' ? false : 2000
-    },
-  })
+  useEffect(() => {
+    if (!selectedId && list?.results?.length) {
+      setSelectedId(list.results[0].id)
+    }
+  }, [selectedId, list])
+
+  const selectedChannel = useMemo(() => {
+    if (!selectedId || !list?.results) return null
+    return list.results.find((item) => item.id === selectedId) ?? null
+  }, [selectedId, list])
 
   return (
     <div className="space-y-6">
       <section className="rounded-xl border border-[rgba(56,139,253,0.3)] bg-[rgba(22,27,34,0.85)] p-5 backdrop-blur">
-        <h2 className="text-accent font-semibold mb-3">Videos (curado/comprimido)</h2>
-        <p className="text-muted text-sm mb-4">Busque; al elegir uno puede solicitar preparación para ver o descargar más tarde.</p>
+        <h2 className="text-accent font-semibold mb-3">TV en vivo (espanol)</h2>
+        <p className="text-muted text-sm mb-4">
+          Catalogo curado de canales en espanol. Si esta en Cuba, use siempre el boton <strong>modo Cuba</strong> para abrir por la ruta optimizada.
+        </p>
         <form
           onSubmit={(e) => {
             e.preventDefault()
             setQuery(q.trim())
           }}
-          className="flex gap-2"
+          className="flex flex-wrap gap-2"
         >
           <input
             type="search"
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Buscar videos..."
-            className="flex-1 rounded-lg border border-[rgba(56,139,253,0.3)] bg-[#0d1117] px-4 py-2.5 text-[#e6edf3] placeholder-muted focus:border-accent focus:outline-none"
+            placeholder="Buscar canal (ej: RTVE, DW, Caribe, France 24)..."
+            className="flex-1 min-w-[220px] rounded-lg border border-[rgba(56,139,253,0.3)] bg-[#0d1117] px-4 py-2.5 text-[#e6edf3] placeholder-muted focus:border-accent focus:outline-none"
           />
           <button type="submit" className="rounded-lg bg-accent/20 text-accent px-4 py-2.5 font-medium hover:bg-accent/30 transition">
             Buscar
           </button>
+          <button
+            type="button"
+            className="rounded-lg border border-[rgba(56,139,253,0.4)] px-4 py-2.5 text-sm text-muted hover:text-accent hover:border-accent/50"
+            onClick={() => {
+              setQ('')
+              setQuery('')
+            }}
+          >
+            Ver todo
+          </button>
         </form>
       </section>
+
       <section className="rounded-xl border border-[rgba(56,139,253,0.3)] bg-[rgba(22,27,34,0.85)] p-5 backdrop-blur">
-        {query && listLoading && <Skeleton />}
-        {query && list && (
+        {listLoading && <Skeleton />}
+        {list && (
           <ul className="space-y-2">
             {list.results.map((v) => (
               <li
@@ -89,37 +98,93 @@ export function VideoPage() {
                 className={`rounded-lg border p-3 cursor-pointer transition ${selectedId === v.id ? 'border-accent bg-accent/10' : 'border-[rgba(56,139,253,0.2)] hover:border-accent/50'}`}
                 onClick={() => {
                   setSelectedId(v.id)
-                  setJobId(null)
                 }}
               >
                 <span className="font-medium block truncate">{v.title}</span>
-                <span className="text-muted text-sm">{v.channel} · {formatDuration(v.duration_sec)}</span>
+                <span className="text-muted text-sm">
+                  {v.channel}
+                  {v.duration_sec > 0 ? ` · ${formatDuration(v.duration_sec)}` : ' · En vivo'}
+                  {v.category ? ` · ${v.category}` : ''}
+                </span>
+                <div className="mt-2 flex items-center gap-2 text-xs">
+                  <span className={`rounded-full px-2 py-0.5 ${v.cuba_ready ? 'bg-green-500/15 text-green-300' : 'bg-yellow-500/15 text-yellow-300'}`}>
+                    {v.cuba_ready ? 'Listo para Cuba' : 'Verificar ruta'}
+                  </span>
+                </div>
               </li>
             ))}
           </ul>
         )}
+        {!listLoading && list && list.results.length === 0 && (
+          <p className="text-sm text-muted">No hay canales para ese filtro. Pruebe con "Ver todo".</p>
+        )}
       </section>
+
       {selectedId && meta && (
         <section className="rounded-xl border border-[rgba(56,139,253,0.3)] bg-[rgba(22,27,34,0.85)] p-5 backdrop-blur">
           <h3 className="text-accent font-semibold mb-2">{meta.title}</h3>
-          <p className="text-muted text-sm mb-3">Calidades: {meta.qualities.join(', ')} · {meta.ready ? 'Listo' : 'No listo'}</p>
-          {!meta.ready && (
-            <button
-              onClick={() => requestMutation.mutate({ id: selectedId, quality: '360p' })}
-              disabled={requestMutation.isPending}
-              className="rounded-lg bg-accent/20 text-accent px-4 py-2 font-medium hover:bg-accent/30 disabled:opacity-50"
+          <p className="text-muted text-sm mb-3">
+            {meta.description || selectedChannel?.description || 'Canal de TV en vivo'} · Calidades sugeridas: {meta.qualities.join(', ')}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <a
+              href={meta.cuba_url || `/api/video/${encodeURIComponent(selectedId)}/stream?mode=cuba`}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-lg bg-accent/20 text-accent px-4 py-2 font-medium hover:bg-accent/30 transition"
             >
-              {requestMutation.isPending ? 'Solicitando…' : 'Solicitar preparación (360p)'}
-            </button>
-          )}
-          {jobId && status && (
-            <p className="mt-2 text-sm text-muted">
-              Estado: {status.status} {status.progress_percent > 0 && `· ${status.progress_percent}%`}
-              {status.status === 'ready' && ' · Listo para ver/descargar'}
-            </p>
-          )}
+              Abrir canal (modo Cuba)
+            </a>
+            <a
+              href={meta.watch_url || `/api/video/${encodeURIComponent(selectedId)}/stream`}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-lg border border-[rgba(56,139,253,0.4)] px-4 py-2 text-sm text-muted hover:text-accent hover:border-accent/50"
+            >
+              Abrir canal (directo)
+            </a>
+          </div>
+          <p className="mt-2 text-xs text-muted">Si un canal no abre en directo, pruebe primero el modo Cuba.</p>
         </section>
       )}
+
+      <section className="rounded-xl border border-[rgba(56,139,253,0.3)] bg-[rgba(22,27,34,0.85)] p-5 backdrop-blur">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h3 className="text-accent font-semibold">Chequeo profesional de canales</h3>
+            <p className="text-muted text-sm">Verifica disponibilidad desde el servidor usando la misma ruta de la app.</p>
+          </div>
+          <button
+            onClick={() => healthMutation.mutate()}
+            disabled={healthMutation.isPending}
+            className="rounded-lg bg-accent/20 text-accent px-4 py-2 font-medium hover:bg-accent/30 disabled:opacity-60"
+          >
+            {healthMutation.isPending ? 'Comprobando...' : 'Comprobar ahora'}
+          </button>
+        </div>
+
+        {healthMutation.data && (
+          <div className="mt-4 space-y-3">
+            <p className="text-sm text-muted">
+              Resultado: {healthMutation.data.reachable}/{healthMutation.data.total} accesibles ({healthMutation.data.mode})
+            </p>
+            <div className="space-y-2">
+              {healthMutation.data.items.map((item) => (
+                <div key={item.id} className="rounded-lg border border-[rgba(56,139,253,0.2)] p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="font-medium">{item.title}</span>
+                    <span className={`text-xs rounded-full px-2 py-0.5 ${item.reachable ? 'bg-green-500/15 text-green-300' : 'bg-red-500/15 text-red-300'}`}>
+                      {item.reachable ? `OK (${item.status_code})` : `Fallo (${item.status_code || 'sin codigo'})`}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-muted break-all">{item.url}</p>
+                  <p className="mt-1 text-xs text-muted">Latencia: {item.latency_ms} ms {item.error ? `· ${item.error}` : ''}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </section>
     </div>
   )
 }

@@ -118,13 +118,50 @@ export async function search(q: string, max = 20): Promise<{ query: string; resu
   return r.json()
 }
 
-export async function videoSearch(q: string, max = 15): Promise<{ results: { id: string; title: string; channel: string; duration_sec: number }[]; cached?: boolean }> {
+export type VideoSearchItem = {
+  id: string
+  title: string
+  channel: string
+  duration_sec: number
+  thumbnail_url?: string
+  description?: string
+  category?: string
+  watch_url?: string
+  cuba_ready?: boolean
+}
+
+export type VideoChannelHealth = {
+  id: string
+  title: string
+  channel: string
+  url: string
+  cuba_mode: boolean
+  cuba_ready: boolean
+  reachable: boolean
+  status_code: number
+  latency_ms: number
+  error?: string
+  checked_at: string
+}
+
+export async function videoSearch(q: string, max = 15): Promise<{ results: VideoSearchItem[]; cached?: boolean }> {
   const r = await fetch(`${BASE}/api/video/search?q=${encodeURIComponent(q)}&max=${max}`)
   if (!r.ok) throw new Error('Búsqueda de video fallida')
   return r.json()
 }
 
-export async function videoMeta(id: string): Promise<{ id: string; title: string; channel: string; duration_sec: number; qualities: string[]; ready: boolean }> {
+export async function videoMeta(id: string): Promise<{
+  id: string
+  title: string
+  channel: string
+  duration_sec: number
+  qualities: string[]
+  ready: boolean
+  live?: boolean
+  description?: string
+  watch_url?: string
+  cuba_url?: string
+}> {
   const r = await fetch(`${BASE}/api/video/${encodeURIComponent(id)}`)
   if (!r.ok) throw new Error('Video no encontrado')
   return r.json()
@@ -143,6 +180,19 @@ export async function videoRequest(id: string, quality = '360p'): Promise<{ job_
 export async function videoStatus(id: string, jobId: string): Promise<{ job_id: string; status: string; progress_percent: number }> {
   const r = await fetch(`${BASE}/api/video/${encodeURIComponent(id)}/status?job_id=${encodeURIComponent(jobId)}`)
   if (!r.ok) throw new Error('Estado no disponible')
+  return r.json()
+}
+
+export async function videoChannelsHealth(max = 12, mode: 'cuba' | 'direct' = 'cuba'): Promise<{
+  items: VideoChannelHealth[]
+  mode: string
+  checked_at: string
+  total: number
+  reachable: number
+  unavailable: number
+}> {
+  const r = await fetch(`${BASE}/api/video/channels/health?max=${max}&mode=${encodeURIComponent(mode)}`)
+  if (!r.ok) throw new Error('No se pudo comprobar la salud de los canales')
   return r.json()
 }
 

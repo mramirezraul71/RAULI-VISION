@@ -1,74 +1,74 @@
+﻿
+# RAULI-VISION ðŸš€
 
-# RAULI-VISION 🚀
-
-**Dashboard unificado y túnel optimizado para entornos de bajo ancho de banda**
+**Dashboard unificado y tÃºnel optimizado para entornos de bajo ancho de banda**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Go](https://img.shields.io/badge/Go-00ADD8?style=flat&logo=go&logoColor=white)](https://golang.org/)
 [![React](https://img.shields.io/badge/React-20232A?style=flat&logo=react&logoColor=61DAFB)](https://reactjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?style=flat&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 
-## 🎯 Descripción
+## ðŸŽ¯ DescripciÃ³n
 
-RAULI-VISION es un sistema completo diseñado para operar eficientemente en entornos de baja conectividad, inspirado en el protocolo "CUBA" para máxima resiliencia. Consiste en tres componentes principales que trabajan en conjunto para proporcionar una experiencia de usuario fluida incluso con conexiones limitadas.
+RAULI-VISION es un sistema completo diseÃ±ado para operar eficientemente en entornos de baja conectividad, inspirado en el protocolo "CUBA" para mÃ¡xima resiliencia. Consiste en tres componentes principales que trabajan en conjunto para proporcionar una experiencia de usuario fluida incluso con conexiones limitadas.
 
-## 🏗️ Arquitectura
+## ðŸ—ï¸ Arquitectura
 
 ```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Espejo (Go)   │◄──►│ Proxy (Go)      │◄──►│ Dashboard (React)│
-│   (Backend)     │    │  (Cache + API)  │    │   (PWA Frontend) │
-│  Puerto 8080    │    │  Puerto 3000    │    │   Modo Offline   │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
+â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”    â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”    â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+â”‚   Espejo (Go)   â”‚â—„â”€â”€â–ºâ”‚ Proxy (Go)      â”‚â—„â”€â”€â–ºâ”‚ Dashboard (React)â”‚
+â”‚   (Backend)     â”‚    â”‚  (Cache + API)  â”‚    â”‚   (PWA Frontend) â”‚
+â”‚  Puerto 8080    â”‚    â”‚  Puerto 3000    â”‚    â”‚   Modo Offline   â”‚
+â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜    â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜    â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
 ```
 
 ### Componentes
 
-- **🔥 Espejo** - Servidor Go con búsqueda, video, IA y compresión Brotli
-- **🌐 Cliente-local** - Proxy Go con caché SQLite; sirve dashboard y reenvía al espejo
-- **📱 Dashboard** - PWA React + TypeScript con modo offline
-- **🎵 CAMI Channel** - Sistema profesional de gestión musical
+- **ðŸ”¥ Espejo** - Servidor Go con bÃºsqueda, video, IA y compresiÃ³n Brotli
+- **ðŸŒ Cliente-local** - Proxy Go con cachÃ© SQLite; sirve dashboard y reenvÃ­a al espejo
+- **ðŸ“± Dashboard** - PWA React + TypeScript con modo offline
+- **ðŸŽµ CAMI Channel** - Sistema profesional de gestiÃ³n musical
 
-## ✨ Características Principales
+## âœ¨ CaracterÃ­sticas Principales
 
-### 🌐 Optimizado para Bajo Ancho de Banda
-- **Compresión Brotli** - Máxima eficiencia en transferencia
-- **Caché Inteligente** - SQLite con persistencia local
-- **Modo Offline** - Funcionalidad completa sin conexión
-- **PWA** - Instalable como aplicación nativa
+### ðŸŒ Optimizado para Bajo Ancho de Banda
+- **CompresiÃ³n Brotli** - MÃ¡xima eficiencia en transferencia
+- **CachÃ© Inteligente** - SQLite con persistencia local
+- **Modo Offline** - Funcionalidad completa sin conexiÃ³n
+- **PWA** - Instalable como aplicaciÃ³n nativa
 
-### 🔍 Motor de Búsqueda
-- **Búsqueda Web Optimizada** - Resultados ligeros y rápidos
-- **Video Streaming** - Compresión adaptativa
-- **Chat IA** - Resúmenes inteligentes de contenido
+### ðŸ” Motor de BÃºsqueda
+- **BÃºsqueda Web Optimizada** - Resultados ligeros y rÃ¡pidos
+- **Video Streaming** - CompresiÃ³n adaptativa
+- **Chat IA** - ResÃºmenes inteligentes de contenido
 
-### 🎵 Canal CAMI
-- **Gestión Musical Profesional** - Upload, metadatos, análisis
+### ðŸŽµ Canal CAMI
+- **GestiÃ³n Musical Profesional** - Upload, metadatos, anÃ¡lisis
 - **Sistema Multi-nivel** - Accesos granulares y seguridad
-- **Estadísticas Avanzadas** - Reproducciones y engagement
+- **EstadÃ­sticas Avanzadas** - Reproducciones y engagement
 
-### 📱 Experiencia de Usuario
-- **Detección de Conexión** - Notificaciones automáticas offline/online
-- **Navegación Intuitiva** - Botón de retorno home siempre visible
-- **Diseño Responsivo** - Adaptado para todos los dispositivos
+### ðŸ“± Experiencia de Usuario
+- **DetecciÃ³n de ConexiÃ³n** - Notificaciones automÃ¡ticas offline/online
+- **NavegaciÃ³n Intuitiva** - BotÃ³n de retorno home siempre visible
+- **DiseÃ±o Responsivo** - Adaptado para todos los dispositivos
 
-## 🚀 Quick Start
+## ðŸš€ Quick Start
 
 ### Prerrequisitos
 - Go 1.22+
 - Node.js 18+
 
-### Instalación Rápida
+### InstalaciÃ³n RÃ¡pida
 
 ```bash
 # Clonar el repositorio
 git clone https://github.com/mramirezraul71/RAULI-VISION.git
 cd RAULI-VISION
 
-# Opción 1: Todo en uno (PowerShell)
+# OpciÃ³n 1: Todo en uno (PowerShell)
 .\scripts\run-all.ps1
 
-# Opción 2: Paso a paso
+# OpciÃ³n 2: Paso a paso
 # Terminal 1 - Espejo
 cd espejo
 go mod tidy
@@ -79,60 +79,68 @@ cd cliente-local
 go mod tidy
 go run ./cmd/proxy
 
-# Dashboard: http://localhost:3000 (el proxy sirve el estático; para React completo: build-dashboard-and-copy.ps1)
+# Dashboard: http://localhost:3000 (el proxy sirve el estÃ¡tico; para React completo: build-dashboard-and-copy.ps1)
 ```
 
 ### Acceso
 - **Dashboard**: http://localhost:3000
 - **API Health (proxy)**: http://localhost:3000/api/health
 - **API Health (espejo)**: http://localhost:8080/api/health
-- **Búsqueda**: http://localhost:3000/api/search?q=test
+- **BÃºsqueda**: http://localhost:3000/api/search?q=test
 
-## 📚 Documentación
+### Instalacion profesional (recomendada)
 
-- [📖 Arquitectura](docs/ARQUITECTURA_RAULI-VISION.md) - Diseño técnico detallado
-- [🔧 API Reference](docs/API_RAULI-VISION.md) - Documentación de endpoints
-- [📁 Estructura](docs/ESTRUCTURA_REPOS_RAULI-VISION.md) - Organización del proyecto
-- [👤 Guía de Usuario](docs/GUIA_USUARIO.md) - Manual de uso completo
-- [🐳 Despliegue](docs/DESPLIEGUE.md) - Docker y producción
-- [🎵 CAMI Channel](docs/CAMI_CHANNEL_ACCESS.md) - Sistema musical profesional
+```powershell
+./scripts/install-professional.ps1 -ApiBase "http://localhost:3000"
+```
 
-## 🛠️ Tecnologías
+Este flujo ejecuta pruebas Go, build del dashboard, copia a `cliente-local/static` y chequeo de canales TV.
+
+## ðŸ“š DocumentaciÃ³n
+
+- [ðŸ“– Arquitectura](docs/ARQUITECTURA_RAULI-VISION.md) - DiseÃ±o tÃ©cnico detallado
+- [ðŸ”§ API Reference](docs/API_RAULI-VISION.md) - DocumentaciÃ³n de endpoints
+- [ðŸ“ Estructura](docs/ESTRUCTURA_REPOS_RAULI-VISION.md) - OrganizaciÃ³n del proyecto
+- [ðŸ‘¤ GuÃ­a de Usuario](docs/GUIA_USUARIO.md) - Manual de uso completo
+- [ðŸ³ Despliegue](docs/DESPLIEGUE.md) - Docker y producciÃ³n
+- [ðŸŽµ CAMI Channel](docs/CAMI_CHANNEL_ACCESS.md) - Sistema musical profesional
+
+## ðŸ› ï¸ TecnologÃ­as
 
 ### Backend
 - **Go** - Servidor principal de alto rendimiento
-- **SQLite** - Base de datos ligera para caché
-- **Brotli** - Compresión de última generación
+- **SQLite** - Base de datos ligera para cachÃ©
+- **Brotli** - CompresiÃ³n de Ãºltima generaciÃ³n
 
 ### Frontend
 - **React 18** - UI moderna y reactiva
 - **TypeScript** - Tipado seguro
-- **Vite** - Build tool ultrarrápido
+- **Vite** - Build tool ultrarrÃ¡pido
 - **TailwindCSS** - Estilos optimizados
 
 ### Infraestructura
 - **PWA** - Progressive Web App
-- **Service Worker** - Caché offline
+- **Service Worker** - CachÃ© offline
 - **Proxy Python** - Middleware flexible
 
-## 🎯 Protocolo "CUBA"
+## ðŸŽ¯ Protocolo "CUBA"
 
-RAULI-VISION implementa el protocolo "CUBA" para máxima resiliencia:
+RAULI-VISION implementa el protocolo "CUBA" para mÃ¡xima resiliencia:
 
 - **C**aching - Almacenamiento inteligente
 - **U**ltra-lightweight - Interfaces minimalistas
 - **B**andwidth-optimized - Uso eficiente de ancho de banda
 - **A**utonomous - Funcionamiento offline
 
-## 📊 Estado del Proyecto
+## ðŸ“Š Estado del Proyecto
 
-- ✅ **Backend** - Completamente funcional
-- ✅ **Frontend** - PWA con modo offline
-- ✅ **Canal CAMI** - Sistema musical profesional
-- ✅ **Audio** - Sistema de respuestas con voz
-- ✅ **Documentación** - Completa y detallada
+- âœ… **Backend** - Completamente funcional
+- âœ… **Frontend** - PWA con modo offline
+- âœ… **Canal CAMI** - Sistema musical profesional
+- âœ… **Audio** - Sistema de respuestas con voz
+- âœ… **DocumentaciÃ³n** - Completa y detallada
 
-## 🤝 Contribuir
+## ðŸ¤ Contribuir
 
 1. Fork el proyecto
 2. Crear una feature branch (`git checkout -b feature/AmazingFeature`)
@@ -140,16 +148,17 @@ RAULI-VISION implementa el protocolo "CUBA" para máxima resiliencia:
 4. Push al branch (`git push origin feature/AmazingFeature`)
 5. Abrir un Pull Request
 
-## 📄 Licencia
+## ðŸ“„ Licencia
 
-Este proyecto está licenciado bajo la Licencia MIT - ver el archivo [LICENSE](LICENSE) para detalles.
+Este proyecto estÃ¡ licenciado bajo la Licencia MIT - ver el archivo [LICENSE](LICENSE) para detalles.
 
-## 🙏 Agradecimientos
+## ðŸ™ Agradecimientos
 
-- Protocolo "CUBA" para inspiración en optimización
+- Protocolo "CUBA" para inspiraciÃ³n en optimizaciÃ³n
 - Comunidad Go y React por herramientas excelentes
 - Todos los contribuyentes y testers
 
 ---
 
-**RAULI-VISION** - *Internet curado para entornos de bajo ancho de banda* 🚀
+**RAULI-VISION** - *Internet curado para entornos de bajo ancho de banda* ðŸš€
+
