@@ -1,6 +1,20 @@
-﻿import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { videoChannelsHealth, videoMeta, videoSearch } from '../api/client'
+
+const CATEGORY_ORDER = [
+  'Noticias Cuba',
+  'General Cuba',
+  'Noticias Internacionales',
+  'General Internacional',
+]
+
+const CATEGORY_STYLE: Record<string, string> = {
+  'Noticias Cuba': 'border-[rgba(34,197,94,0.35)] bg-[rgba(34,197,94,0.12)] text-green-300',
+  'General Cuba': 'border-[rgba(59,130,246,0.35)] bg-[rgba(59,130,246,0.12)] text-blue-300',
+  'Noticias Internacionales': 'border-[rgba(245,158,11,0.35)] bg-[rgba(245,158,11,0.12)] text-amber-300',
+  'General Internacional': 'border-[rgba(168,85,247,0.35)] bg-[rgba(168,85,247,0.12)] text-violet-300',
+}
 
 function Skeleton() {
   return (
@@ -62,7 +76,14 @@ export function VideoPage() {
         groups.set(category, [item])
       }
     }
-    return Array.from(groups.entries()).sort((a, b) => a[0].localeCompare(b[0]))
+    return Array.from(groups.entries()).sort((a, b) => {
+      const ai = CATEGORY_ORDER.indexOf(a[0])
+      const bi = CATEGORY_ORDER.indexOf(b[0])
+      const aOrder = ai >= 0 ? ai : Number.MAX_SAFE_INTEGER
+      const bOrder = bi >= 0 ? bi : Number.MAX_SAFE_INTEGER
+      if (aOrder !== bOrder) return aOrder - bOrder
+      return a[0].localeCompare(b[0])
+    })
   }, [list])
 
   return (
@@ -108,7 +129,11 @@ export function VideoPage() {
           <div className="space-y-4">
             {groupedChannels.map(([category, channels]) => (
               <div key={category}>
-                <div className="mb-2 inline-flex items-center rounded-full border border-[rgba(56,139,253,0.35)] bg-[rgba(56,139,253,0.12)] px-3 py-1 text-xs font-semibold text-accent">
+                <div
+                  className={`mb-2 inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold ${
+                    CATEGORY_STYLE[category] || 'border-[rgba(56,139,253,0.35)] bg-[rgba(56,139,253,0.12)] text-accent'
+                  }`}
+                >
                   {category} ({channels.length})
                 </div>
                 <ul className="space-y-2">
