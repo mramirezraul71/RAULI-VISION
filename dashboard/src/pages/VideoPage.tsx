@@ -36,6 +36,7 @@ export function VideoPage() {
   const [q, setQ] = useState('')
   const [query, setQuery] = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [scope, setScope] = useState<'all' | 'cuba' | 'internacional'>('all')
 
   const { data: list, isFetching: listLoading } = useQuery({
     queryKey: ['videoSearch', query],
@@ -69,6 +70,15 @@ export function VideoPage() {
     const groups = new Map<string, NonNullable<typeof list>['results']>()
     for (const item of list?.results ?? []) {
       const category = (item.category || 'General').trim() || 'General'
+      const catLower = category.toLowerCase()
+      const isCuba = catLower.includes('cuba')
+      const isInternacional = catLower.includes('internacional')
+      if (scope === 'cuba' && !isCuba) {
+        continue
+      }
+      if (scope === 'internacional' && !isInternacional) {
+        continue
+      }
       const existing = groups.get(category)
       if (existing) {
         existing.push(item)
@@ -84,7 +94,7 @@ export function VideoPage() {
       if (aOrder !== bOrder) return aOrder - bOrder
       return a[0].localeCompare(b[0])
     })
-  }, [list])
+  }, [list, scope])
 
   return (
     <div className="space-y-6">
@@ -124,6 +134,41 @@ export function VideoPage() {
       </section>
 
       <section className="rounded-xl border border-[rgba(56,139,253,0.3)] bg-[rgba(22,27,34,0.85)] p-5 backdrop-blur">
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setScope('all')}
+            className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+              scope === 'all'
+                ? 'border-accent bg-accent/20 text-accent'
+                : 'border-[rgba(56,139,253,0.35)] bg-[rgba(56,139,253,0.08)] text-muted hover:text-accent hover:border-accent/50'
+            }`}
+          >
+            Todo
+          </button>
+          <button
+            type="button"
+            onClick={() => setScope('cuba')}
+            className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+              scope === 'cuba'
+                ? 'border-green-400/60 bg-green-500/20 text-green-300'
+                : 'border-[rgba(34,197,94,0.35)] bg-[rgba(34,197,94,0.08)] text-muted hover:text-green-300 hover:border-green-400/60'
+            }`}
+          >
+            Solo Cuba
+          </button>
+          <button
+            type="button"
+            onClick={() => setScope('internacional')}
+            className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+              scope === 'internacional'
+                ? 'border-amber-400/60 bg-amber-500/20 text-amber-300'
+                : 'border-[rgba(245,158,11,0.35)] bg-[rgba(245,158,11,0.08)] text-muted hover:text-amber-300 hover:border-amber-400/60'
+            }`}
+          >
+            Solo Internacional
+          </button>
+        </div>
         {listLoading && <Skeleton />}
         {list && (
           <div className="space-y-4">
@@ -164,6 +209,11 @@ export function VideoPage() {
         )}
         {!listLoading && list && list.results.length === 0 && (
           <p className="text-sm text-muted">No hay canales para ese filtro. Pruebe con "Ver todo".</p>
+        )}
+        {!listLoading && list && list.results.length > 0 && groupedChannels.length === 0 && (
+          <p className="text-sm text-muted">
+            No hay canales en este alcance. Cambie a <strong>Todo</strong> o use otro filtro.
+          </p>
         )}
       </section>
 
