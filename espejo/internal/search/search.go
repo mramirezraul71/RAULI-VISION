@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -20,13 +21,15 @@ type Service struct {
 	client *http.Client
 }
 
+var directDomainRE = regexp.MustCompile(`^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$`)
+
 func New() *Service {
 	return &Service{
 		client: &http.Client{Timeout: 15 * time.Second},
 	}
 }
 
-// ddgInstantAnswerResponse para la API JSON de DuckDuckGo (sin API key)
+// ddgInstantAnswerResponse for DuckDuckGo API (no key).
 type ddgInstantAnswerResponse struct {
 	Abstract      string `json:"Abstract"`
 	AbstractURL   string `json:"AbstractURL"`
@@ -47,18 +50,36 @@ func (s *Service) Search(q string, max int) ([]Result, error) {
 	if max > 50 {
 		max = 50
 	}
-	// 1) API DuckDuckGo Instant Answer (JSON, sin key) — siempre devuelve algo útil
+
+	directURL, directHost, hasDirect := resolveDirectURL(q)
+	prefix := make([]Result, 0, 1)
+	if hasDirect {
+		openURL := withCubaProxy(directURL)
+		snippet := "Enlace directo detectado desde la consulta."
+		if openURL != directURL {
+			snippet = "Enlace directo detectado y enroutado por proxy Cuba."
+		}
+		prefix = append(prefix, Result{
+			Title:   "Abrir " + directHost,
+			URL:     openURL,
+			Snippet: snippet,
+		})
+	}
+
+	// 1) DuckDuckGo API.
 	results := s.searchDuckDuckGoAPI(q, max)
-	if len(results) > 0 {
+	if len(results) == 0 {
+		// 2) HTML scraping fallback.
+		results = s.searchDuckDuckGoHTML(q, max)
+	}
+	if len(results) == 0 {
+		// 3) Friendly fallback.
+		results = s.fallbackResults(q, max)
+	}
+	if len(prefix) == 0 {
 		return results, nil
 	}
-	// 2) Scraping HTML como respaldo (puede fallar por bloqueos o cambio de HTML)
-	results = s.searchDuckDuckGoHTML(q, max)
-	if len(results) > 0 {
-		return results, nil
-	}
-	// 3) Fallback amigable
-	return s.fallbackResults(q, max), nil
+	return mergeResults(prefix, results, max), nil
 }
 
 func (s *Service) searchDuckDuckGoAPI(q string, max int) []Result {
@@ -165,7 +186,7 @@ func (s *Service) parseDDGHTML(html []byte, max int) []Result {
 		out = append(out, Result{Title: title, URL: rawURL, Snippet: snippet})
 	}
 	if len(out) == 0 {
-		// Intentar regex más genérico por si cambió el HTML
+		// More generic regex if HTML changed.
 		all := reLinkAlt.FindAllStringSubmatch(content, max*2)
 		seen := make(map[string]bool)
 		for _, m := range all {
@@ -198,8 +219,106 @@ func stripHTML(s string) string {
 
 func (s *Service) fallbackResults(q string, max int) []Result {
 	return []Result{
-		{Title: "Búsqueda: " + q, URL: "https://duckduckgo.com/?q=" + url.QueryEscape(q), Snippet: "Sin resultados directos. Puede buscar en DuckDuckGo con el enlace anterior."},
+		{
+			Title:   "Búsqueda: " + q,
+			URL:     "https://duckduckgo.com/?q=" + url.QueryEscape(q),
+			Snippet: "Sin resultados directos. Puede buscar en DuckDuckGo con el enlace anterior.",
+		},
 	}
+}
+
+func resolveDirectURL(q string) (string, string, bool) {
+	raw := strings.TrimSpace(strings.ToLower(q))
+	if raw == "" {
+		return "", "", false
+	}
+	// Full URL.
+	if strings.HasPrefix(raw, "http://") || strings.HasPrefix(raw, "https://") {
+		u, err := url.Parse(raw)
+		if err != nil || u.Host == "" {
+			return "", "", false
+		}
+		return u.String(), u.Host, true
+	}
+	// Bare domain (example: tiktok.com).
+	if strings.Contains(raw, " ") || !directDomainRE.MatchString(raw) {
+		return "", "", false
+	}
+	full := "https://" + raw
+	u, err := url.Parse(full)
+	if err != nil || u.Host == "" {
+		return "", "", false
+	}
+	return u.String(), u.Host, true
+}
+
+func withCubaProxy(target string) string {
+	target = strings.TrimSpace(target)
+	if target == "" {
+		return target
+	}
+	tu, err := url.Parse(target)
+	if err != nil || tu.Host == "" {
+		return target
+	}
+	host := strings.ToLower(strings.TrimSpace(tu.Hostname()))
+	base := strings.TrimSpace(os.Getenv("ATLAS_CUBA_PROXY_URL"))
+	if base == "" {
+		// Fallback práctico: para dominios restringidos en Cuba, devolvemos un
+		// espejo de lectura que suele abrir incluso con bloqueo geográfico.
+		if isCubaRestrictedHost(host) {
+			normalized := strings.TrimPrefix(strings.TrimPrefix(target, "https://"), "http://")
+			return "https://r.jina.ai/http://" + normalized
+		}
+		return target
+	}
+	u, err := url.Parse(base)
+	if err != nil || !u.IsAbs() {
+		return target
+	}
+	q := u.Query()
+	q.Set("url", target)
+	u.RawQuery = q.Encode()
+	return u.String()
+}
+
+func isCubaRestrictedHost(host string) bool {
+	h := strings.TrimPrefix(strings.ToLower(strings.TrimSpace(host)), "www.")
+	switch {
+	case h == "tiktok.com":
+		return true
+	case strings.HasSuffix(h, ".tiktok.com"):
+		return true
+	case h == "musical.ly":
+		return true
+	case strings.HasSuffix(h, ".musical.ly"):
+		return true
+	default:
+		return false
+	}
+}
+
+func mergeResults(prefix []Result, tail []Result, max int) []Result {
+	out := make([]Result, 0, max)
+	seen := make(map[string]bool)
+	add := func(r Result) {
+		if len(out) >= max {
+			return
+		}
+		key := strings.TrimSpace(r.URL)
+		if key == "" || seen[key] {
+			return
+		}
+		seen[key] = true
+		out = append(out, r)
+	}
+	for _, r := range prefix {
+		add(r)
+	}
+	for _, r := range tail {
+		add(r)
+	}
+	return out
 }
 
 func (s *Service) SearchJSON(q string, max int) ([]byte, error) {

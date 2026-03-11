@@ -156,11 +156,17 @@ func (s *Service) ProcessFeedback(w http.ResponseWriter, r *http.Request) {
 		"status":       decision.Status,
 	})
 
+	atlasReply := decision.UserMessage
+	if msg := s.requestAtlasCommsReply(brainData, decision); strings.TrimSpace(msg) != "" {
+		atlasReply = msg
+	}
+
 	// Responder al cliente
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"success":    true,
 		"message":    decision.UserMessage,
+		"atlasReply": atlasReply,
 		"analysis":   analysisResult,
 		"decision":   decision.Decision,
 		"status":     decision.Status,
@@ -214,6 +220,47 @@ func (s *Service) requestAtlasDecision(brainData BrainData, analysis AIAnalysis)
 		return nil, fmt.Errorf("atlas decision not ok")
 	}
 	return &out.AtlasFeedbackDecision, nil
+}
+
+func (s *Service) requestAtlasCommsReply(brainData BrainData, decision *AtlasFeedbackDecision) string {
+	base := strings.TrimSpace(s.atlasBaseURL)
+	if base == "" {
+		base = "http://127.0.0.1:8791"
+	}
+	body := map[string]interface{}{
+		"user_id": "vision:owner",
+		"channel": "vision-feedback",
+		"message": fmt.Sprintf("Procesa feedback y responde breve. Titulo: %s. Severidad: %s. Decision: %s. Estado: %s.", brainData.Feedback.Title, brainData.Feedback.Severity, decision.Decision, decision.Status),
+		"context": map[string]interface{}{
+			"source":      "rauli-vision-feedback",
+			"feedback_id": brainData.Feedback.ID,
+			"type":        brainData.Feedback.Type,
+			"severity":    brainData.Feedback.Severity,
+			"title":       brainData.Feedback.Title,
+			"decision":    decision.Decision,
+			"status":      decision.Status,
+		},
+	}
+	payload, _ := json.Marshal(body)
+	req, err := http.NewRequest("POST", base+"/api/comms/atlas/message", bytes.NewReader(payload))
+	if err != nil {
+		return ""
+	}
+	req.Header.Set("Content-Type", "application/json")
+	client := &http.Client{Timeout: 12 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return ""
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return ""
+	}
+	var out map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(fmt.Sprintf("%v", out["reply"]))
 }
 
 func (s *Service) analyzeWithMyBrain(brainData BrainData) (*AIAnalysis, error) {

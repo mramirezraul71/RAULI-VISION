@@ -196,7 +196,16 @@ export async function videoChannelsHealth(max = 12, mode: 'cuba' | 'direct' = 'c
   return r.json()
 }
 
-export async function chat(message: string, contextUrl?: string): Promise<{ reply: string; sources_used?: string[] }> {
+export type ChatRuntime = {
+  provider?: string
+  family?: string
+  model?: string
+  route?: string
+  latency_ms?: number
+  offline?: boolean
+}
+
+export async function chat(message: string, contextUrl?: string): Promise<{ reply: string; sources_used?: string[]; runtime?: ChatRuntime }> {
   const r = await fetch(`${BASE}/api/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

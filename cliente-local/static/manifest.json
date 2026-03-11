@@ -1,0 +1,10 @@
+{
+  "name": "RAULI-VISION",
+  "short_name": "RAULI-VISION",
+  "description": "Dashboard unificado para entornos de bajo ancho de banda",
+  "theme_color": "#0d1117",
+  "background_color": "#0d1117",
+  "display": "standalone",
+  "start_url": "/",
+  "scope": "/"
+}
