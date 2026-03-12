@@ -217,6 +217,37 @@ export async function chat(message: string, contextUrl?: string): Promise<{ repl
 
 // ── TikTok proxy API ─────────────────────────────────────────────────────────
 
+export type TikTokFeedItem = {
+  id: string
+  title: string
+  uploader: string
+  avatar?: string
+  duration_sec: number
+  thumbnail_url?: string
+  stream_url: string
+  digg_count?: number
+  comment_count?: number
+  share_count?: number
+}
+
+export type TikTokFeedResponse = {
+  items: TikTokFeedItem[]
+  cursor: string
+  has_more: boolean
+}
+
+export async function tiktokTrending(count = 20, cursor = ''): Promise<TikTokFeedResponse> {
+  const r = await fetch(`${BASE}/api/tiktok/trending?count=${count}&cursor=${encodeURIComponent(cursor)}`)
+  if (!r.ok) throw new Error('No se pudieron cargar las tendencias de TikTok')
+  return r.json()
+}
+
+export async function tiktokSearch(q: string, count = 20, cursor = ''): Promise<TikTokFeedResponse & { query: string }> {
+  const r = await fetch(`${BASE}/api/tiktok/search?q=${encodeURIComponent(q)}&count=${count}&cursor=${encodeURIComponent(cursor)}`)
+  if (!r.ok) throw new Error('Búsqueda de TikTok fallida')
+  return r.json()
+}
+
 export type TikTokStatus = {
   available: boolean
   cuba_bypass: boolean

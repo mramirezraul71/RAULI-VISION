@@ -498,6 +498,54 @@ func (h *Handlers) GetTikTokStream(w http.ResponseWriter, r *http.Request) {
 	h.TikTok.ProxyStream(w, streamURL)
 }
 
+// GetTikTokTrending devuelve el feed de tendencias globales de TikTok.
+// Query params: count (default 20), cursor (paginación)
+func (h *Handlers) GetTikTokTrending(w http.ResponseWriter, r *http.Request) {
+	count, _ := strconv.Atoi(r.URL.Query().Get("count"))
+	cursor := r.URL.Query().Get("cursor")
+	if h.TikTok == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "service_unavailable", "message": "Servicio TikTok no disponible"})
+		return
+	}
+	items, nextCursor, hasMore, err := h.TikTok.FetchTrending(count, cursor)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "fetch_failed", "message": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"items":    items,
+		"cursor":   nextCursor,
+		"has_more": hasMore,
+	})
+}
+
+// GetTikTokSearch busca videos de TikTok por palabras clave.
+// Query params: q (requerido), count (default 20), cursor (paginación)
+func (h *Handlers) GetTikTokSearch(w http.ResponseWriter, r *http.Request) {
+	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	if q == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad_request", "message": "parámetro 'q' requerido"})
+		return
+	}
+	count, _ := strconv.Atoi(r.URL.Query().Get("count"))
+	cursor := r.URL.Query().Get("cursor")
+	if h.TikTok == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "service_unavailable", "message": "Servicio TikTok no disponible"})
+		return
+	}
+	items, nextCursor, hasMore, err := h.TikTok.SearchVideos(q, count, cursor)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "fetch_failed", "message": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"items":    items,
+		"cursor":   nextCursor,
+		"has_more": hasMore,
+		"query":    q,
+	})
+}
+
 func clientIP(r *http.Request) string {
 	if fwd := strings.TrimSpace(r.Header.Get("X-Forwarded-For")); fwd != "" {
 		parts := strings.Split(fwd, ",")

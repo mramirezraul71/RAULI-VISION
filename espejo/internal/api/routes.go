@@ -84,6 +84,8 @@ func Register(mux *http.ServeMux, version string, authSvc *auth.Service, searchS
 	// GET /api/tiktok/fetch?url=... → extrae info + stream_url de un video TikTok
 	// GET /api/tiktok/stream?url=.. → retransmite el stream directamente al cliente
 	mux.HandleFunc("GET /api/tiktok/status", chain(h.GetTikTokStatus))
+	mux.HandleFunc("GET /api/tiktok/trending", chain(h.GetTikTokTrending))
+	mux.HandleFunc("GET /api/tiktok/search", chain(h.GetTikTokSearch))
 	mux.HandleFunc("GET /api/tiktok/fetch", chain(h.GetTikTokFetch))
 	mux.HandleFunc("GET /api/tiktok/stream", h.GetTikTokStream) // sin brotli: es stream binario
 }

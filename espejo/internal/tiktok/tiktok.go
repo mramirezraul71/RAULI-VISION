@@ -288,6 +288,150 @@ func (s *Service) fetchViaYtdlp(rawURL string) (VideoInfo, error) {
 	}, nil
 }
 
+// ─── Feed & Search (tikwm) ────────────────────────────────────────────────────
+
+// FeedItem representa un video del feed de tendencias o búsqueda.
+type FeedItem struct {
+	ID           string `json:"id"`
+	Title        string `json:"title"`
+	Uploader     string `json:"uploader"`
+	Avatar       string `json:"avatar,omitempty"`
+	DurationSec  int    `json:"duration_sec"`
+	ThumbnailURL string `json:"thumbnail_url,omitempty"`
+	StreamURL    string `json:"stream_url"`
+	DiggCount    int    `json:"digg_count,omitempty"`
+	CommentCount int    `json:"comment_count,omitempty"`
+	ShareCount   int    `json:"share_count,omitempty"`
+}
+
+// tikwm /api/feed/list — data is a direct array
+type tikwmTrendResponse struct {
+	Code int              `json:"code"`
+	Msg  string           `json:"msg"`
+	Data []tikwmVideoItem `json:"data"`
+}
+
+// tikwm /api/feed/search — data is an object with videos + cursor
+type tikwmSearchResponse struct {
+	Code int    `json:"code"`
+	Msg  string `json:"msg"`
+	Data struct {
+		Videos  []tikwmVideoItem `json:"videos"`
+		Cursor  int              `json:"cursor"`
+		HasMore bool             `json:"hasMore"`
+	} `json:"data"`
+}
+
+type tikwmVideoItem struct {
+	VideoID  string `json:"video_id"` // feed uses video_id
+	ID       string `json:"id"`       // single-video uses id
+	Title    string `json:"title"`
+	Play     string `json:"play"`
+	HdPlay   string `json:"hdplay"`
+	Cover    string `json:"cover"`
+	Duration int    `json:"duration"`
+	Author   struct {
+		Nickname string `json:"nickname"`
+		Avatar   string `json:"avatar"`
+	} `json:"author"`
+	DiggCount    int `json:"digg_count"`
+	CommentCount int `json:"comment_count"`
+	ShareCount   int `json:"share_count"`
+}
+
+func (v *tikwmVideoItem) effectiveID() string {
+	if v.VideoID != "" {
+		return v.VideoID
+	}
+	return v.ID
+}
+
+func tikwmItemToFeed(v tikwmVideoItem) (FeedItem, bool) {
+	stream := v.HdPlay
+	if stream == "" {
+		stream = v.Play
+	}
+	if stream == "" {
+		return FeedItem{}, false
+	}
+	return FeedItem{
+		ID:           v.effectiveID(),
+		Title:        v.Title,
+		Uploader:     v.Author.Nickname,
+		Avatar:       v.Author.Avatar,
+		DurationSec:  v.Duration,
+		ThumbnailURL: v.Cover,
+		StreamURL:    stream,
+		DiggCount:    v.DiggCount,
+		CommentCount: v.CommentCount,
+		ShareCount:   v.ShareCount,
+	}, true
+}
+
+// FetchTrending devuelve el feed de videos en tendencia global vía tikwm.com.
+func (s *Service) FetchTrending(count int, _ string) ([]FeedItem, string, bool, error) {
+	if count <= 0 || count > 30 {
+		count = 20
+	}
+	apiURL := fmt.Sprintf("https://www.tikwm.com/api/feed/list?count=%d&region=US", count)
+	resp, err := s.client.Get(apiURL)
+	if err != nil {
+		return nil, "", false, fmt.Errorf("tikwm feed inalcanzable: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var tr tikwmTrendResponse
+	if err := json.NewDecoder(resp.Body).Decode(&tr); err != nil {
+		return nil, "", false, fmt.Errorf("tikwm feed respuesta inválida: %w", err)
+	}
+	if tr.Code != 0 {
+		return nil, "", false, fmt.Errorf("tikwm feed error: %s", tr.Msg)
+	}
+
+	items := make([]FeedItem, 0, len(tr.Data))
+	for _, v := range tr.Data {
+		if item, ok := tikwmItemToFeed(v); ok {
+			items = append(items, item)
+		}
+	}
+	return items, "", false, nil
+}
+
+// SearchVideos busca videos de TikTok por palabras clave vía tikwm.com.
+func (s *Service) SearchVideos(query string, count int, cursor string) ([]FeedItem, string, bool, error) {
+	if count <= 0 || count > 30 {
+		count = 20
+	}
+	cur := "0"
+	if cursor != "" {
+		cur = cursor
+	}
+	apiURL := fmt.Sprintf("https://www.tikwm.com/api/feed/search?keywords=%s&count=%d&cursor=%s",
+		url.QueryEscape(query), count, cur)
+	resp, err := s.client.Get(apiURL)
+	if err != nil {
+		return nil, "", false, fmt.Errorf("tikwm search inalcanzable: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var tr tikwmSearchResponse
+	if err := json.NewDecoder(resp.Body).Decode(&tr); err != nil {
+		return nil, "", false, fmt.Errorf("tikwm search respuesta inválida: %w", err)
+	}
+	if tr.Code != 0 {
+		return nil, "", false, fmt.Errorf("tikwm search error: %s", tr.Msg)
+	}
+
+	items := make([]FeedItem, 0, len(tr.Data.Videos))
+	for _, v := range tr.Data.Videos {
+		if item, ok := tikwmItemToFeed(v); ok {
+			items = append(items, item)
+		}
+	}
+	nextCursor := fmt.Sprintf("%d", tr.Data.Cursor)
+	return items, nextCursor, tr.Data.HasMore, nil
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 func (s *Service) setCache(key string, info VideoInfo) {
