@@ -6,7 +6,7 @@ export function HomeButton() {
   return (
     <button
       onClick={scrollToTop}
-      className="fixed bottom-6 right-6 z-50 bg-accent hover:bg-accent/80 text-bg p-3 rounded-full shadow-lg transition-all duration-200 hover:scale-110 group"
+      className="hidden md:block fixed bottom-6 right-6 z-50 bg-accent hover:bg-accent/80 text-bg p-3 rounded-full shadow-lg transition-all duration-200 hover:scale-110 group"
       title="Volver al Dashboard"
     >
       <svg 
