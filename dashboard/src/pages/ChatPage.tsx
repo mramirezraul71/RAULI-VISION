@@ -1,4 +1,4 @@
-﻿import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { chat, chatHistory } from '../api/client'
 
@@ -23,10 +23,35 @@ function runtimeLabel(value?: string | null) {
   return raw
 }
 
+type HistoryItem = { id: string; role: string; preview: string; ts: string }
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false)
+  const handleCopy = () => {
+    navigator.clipboard?.writeText(text).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
+  }
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      className="text-xs text-muted hover:text-accent transition px-2 py-1 rounded border border-[rgba(56,139,253,0.2)] hover:border-accent/40"
+      title="Copiar respuesta"
+    >
+      {copied ? 'Copiado!' : 'Copiar respuesta'}
+    </button>
+  )
+}
+
 export function ChatPage() {
   const [message, setMessage] = useState('')
   const [contextUrl, setContextUrl] = useState('')
+  const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set())
+  const [expandedSources, setExpandedSources] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
   const queryClient = useQueryClient()
 
   const { data: history } = useQuery({
@@ -39,12 +64,47 @@ export function ChatPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['chatHistory'] })
       setMessage('')
+      setExpandedSources(false)
     },
   })
+
+  const handleSubmit = useCallback(() => {
+    if (message.trim() && !mutation.isPending) {
+      mutation.mutate()
+    }
+  }, [message, mutation])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [history, mutation.data])
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault()
+      handleSubmit()
+    }
+  }
+
+  const handleDeleteHistory = async (id: string) => {
+    // Optimistically remove from UI
+    setDeletedIds((prev) => new Set([...prev, id]))
+    // Attempt DELETE call — silently ignore if endpoint doesn't exist
+    try {
+      await fetch(`/api/chat/history/${encodeURIComponent(id)}`, { method: 'DELETE' })
+    } catch {
+      // ignore
+    }
+    queryClient.invalidateQueries({ queryKey: ['chatHistory'] })
+  }
+
+  const handleLoadContext = (item: HistoryItem) => {
+    if (item.role === 'user') {
+      setMessage(item.preview)
+      textareaRef.current?.focus()
+    }
+  }
+
+  const visibleHistory = (history?.items ?? []).filter((m) => !deletedIds.has(m.id))
 
   return (
     <div className="space-y-6">
@@ -56,7 +116,7 @@ export function ChatPage() {
         <form
           onSubmit={(e) => {
             e.preventDefault()
-            if (message.trim()) mutation.mutate()
+            handleSubmit()
           }}
           className="space-y-3"
         >
@@ -67,13 +127,20 @@ export function ChatPage() {
             placeholder="URL a resumir (opcional)"
             className="w-full rounded-lg border border-[rgba(56,139,253,0.3)] bg-[#0d1117] px-4 py-2 text-[#e6edf3] placeholder-muted focus:border-accent focus:outline-none"
           />
-          <textarea
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            placeholder="Escriba su pregunta..."
-            rows={3}
-            className="w-full rounded-lg border border-[rgba(56,139,253,0.3)] bg-[#0d1117] px-4 py-2 text-[#e6edf3] placeholder-muted focus:border-accent focus:outline-none resize-none"
-          />
+          <div className="relative">
+            <textarea
+              ref={textareaRef}
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Escriba su pregunta..."
+              rows={3}
+              className="w-full rounded-lg border border-[rgba(56,139,253,0.3)] bg-[#0d1117] px-4 py-2 text-[#e6edf3] placeholder-muted focus:border-accent focus:outline-none resize-none"
+            />
+            <span className="absolute bottom-2 right-3 text-xs text-muted pointer-events-none">
+              Ctrl+Enter para enviar
+            </span>
+          </div>
           <button
             type="submit"
             disabled={!message.trim() || mutation.isPending}
@@ -83,12 +150,13 @@ export function ChatPage() {
           </button>
         </form>
       </section>
-      <section className="rounded-xl border border-[rgba(56,139,253,0.3)] bg-[rgba(22,27,34,0.85)] p-5 backdrop-blur max-h-96 overflow-y-auto">
+
+      <section className="rounded-xl border border-[rgba(56,139,253,0.3)] bg-[rgba(22,27,34,0.85)] p-5 backdrop-blur max-h-[600px] overflow-y-auto">
         <h3 className="text-accent font-semibold mb-3">Respuesta</h3>
         {mutation.isPending && <p className="text-muted text-sm">Trayendo información del exterior, paciencia...</p>}
         {mutation.isError && <p className="text-red-400 text-sm">Error: {(mutation.error as Error).message}</p>}
         {mutation.data && (
-          <div className="space-y-2">
+          <div className="space-y-3">
             {mutation.data.runtime ? (
               <div className="flex flex-wrap gap-2">
                 <span className="rounded-full border border-[rgba(56,139,253,0.3)] bg-[rgba(56,139,253,0.12)] px-3 py-1 text-[11px] text-accent">
@@ -117,24 +185,88 @@ export function ChatPage() {
               </div>
             ) : null}
             <p className="text-[#e6edf3] whitespace-pre-wrap">{fixMojibake(mutation.data.reply)}</p>
+
+            {/* Copy button for AI response */}
+            <div className="flex items-center gap-3">
+              <CopyButton text={fixMojibake(mutation.data.reply)} />
+            </div>
+
+            {/* Sources as expandable list */}
             {mutation.data.sources_used?.length ? (
-              <p className="text-muted text-xs">Fuentes: {mutation.data.sources_used.join(', ')}</p>
+              <div>
+                <button
+                  type="button"
+                  onClick={() => setExpandedSources((v) => !v)}
+                  className="flex items-center gap-1 text-xs text-muted hover:text-accent transition"
+                >
+                  <svg
+                    className={`w-3 h-3 transition-transform ${expandedSources ? 'rotate-90' : ''}`}
+                    fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                  {mutation.data.sources_used.length} fuente{mutation.data.sources_used.length !== 1 ? 's' : ''} utilizadas
+                </button>
+                {expandedSources && (
+                  <ul className="mt-2 space-y-1 pl-4">
+                    {mutation.data.sources_used.map((src, i) => (
+                      <li key={i} className="text-xs">
+                        {src.startsWith('http') ? (
+                          <a
+                            href={src}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-accent hover:underline break-all"
+                          >
+                            {src}
+                          </a>
+                        ) : (
+                          <span className="text-muted">{src}</span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             ) : null}
           </div>
         )}
-        {history?.items?.length ? (
+
+        {visibleHistory.length > 0 && (
           <div className="mt-4 pt-4 border-t border-[rgba(56,139,253,0.2)]">
             <p className="text-muted text-xs mb-2">Historial reciente</p>
-            {history.items.slice(-5).reverse().map((m) => (
-              <div key={m.id} className="text-sm py-1">
-                <span className={m.role === 'user' ? 'text-accent' : 'text-muted'}>{m.role}:</span> {fixMojibake(m.preview)}
-              </div>
-            ))}
+            <div className="space-y-1">
+              {visibleHistory.slice(-10).reverse().map((m) => (
+                <div
+                  key={m.id}
+                  className="group flex items-center gap-2 text-sm py-1 rounded px-1 hover:bg-[rgba(56,139,253,0.05)] transition"
+                >
+                  <button
+                    type="button"
+                    className="flex-1 text-left"
+                    onClick={() => handleLoadContext(m)}
+                    title={m.role === 'user' ? 'Cargar este mensaje' : undefined}
+                  >
+                    <span className={m.role === 'user' ? 'text-accent' : 'text-muted'}>{m.role}:</span>{' '}
+                    <span className="text-[#e6edf3]">{fixMojibake(m.preview)}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteHistory(m.id)}
+                    className="opacity-0 group-hover:opacity-100 text-muted hover:text-red-400 transition p-1 rounded"
+                    title="Eliminar del historial"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
-        ) : null}
+        )}
         <div ref={bottomRef} />
       </section>
     </div>
   )
 }
-

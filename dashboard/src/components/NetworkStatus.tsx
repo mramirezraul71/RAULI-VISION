@@ -1,94 +1,146 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
+
+type ConnState = 'connected' | 'server_down' | 'no_internet'
+
+function getStateLabel(state: ConnState) {
+  switch (state) {
+    case 'connected': return 'Conectado'
+    case 'server_down': return 'Servidor no disponible'
+    case 'no_internet': return 'Sin internet'
+  }
+}
+
+function getStateColor(state: ConnState) {
+  switch (state) {
+    case 'connected': return 'bg-success'
+    case 'server_down': return 'bg-[#f0883e]'  // orange
+    case 'no_internet': return 'bg-destructive'
+  }
+}
+
+async function pingServer(): Promise<boolean> {
+  try {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 5000)
+    const r = await fetch('/api/health', { signal: controller.signal, cache: 'no-store' })
+    clearTimeout(timeout)
+    return r.ok
+  } catch {
+    return false
+  }
+}
 
 export function NetworkStatus() {
   const [isOnline, setIsOnline] = useState(navigator.onLine)
-  const [showOfflineMessage, setShowOfflineMessage] = useState(false)
+  const [serverUp, setServerUp] = useState(true)
+  const [showBanner, setShowBanner] = useState(false)
+  const pingRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  const connState: ConnState = !isOnline
+    ? 'no_internet'
+    : !serverUp
+    ? 'server_down'
+    : 'connected'
+
+  const checkServer = useCallback(async () => {
+    if (!navigator.onLine) {
+      setServerUp(false)
+      return
+    }
+    const ok = await pingServer()
+    setServerUp(ok)
+    if (!ok) setShowBanner(true)
+  }, [])
 
   useEffect(() => {
     const handleOnline = () => {
       setIsOnline(true)
-      setShowOfflineMessage(false)
+      checkServer()
     }
-
     const handleOffline = () => {
       setIsOnline(false)
-      setShowOfflineMessage(true)
+      setServerUp(false)
+      setShowBanner(true)
     }
 
     window.addEventListener('online', handleOnline)
     window.addEventListener('offline', handleOffline)
 
+    // Initial ping
+    checkServer()
+
+    // Poll every 30s
+    pingRef.current = setInterval(checkServer, 30_000)
+
     return () => {
       window.removeEventListener('online', handleOnline)
       window.removeEventListener('offline', handleOffline)
+      if (pingRef.current) clearInterval(pingRef.current)
     }
-  }, [])
+  }, [checkServer])
 
-  const handleDismissOfflineMessage = () => {
-    setShowOfflineMessage(false)
-  }
-
-  const getSystemInfo = () => {
-    if (isOnline) {
-      return {
-        icon: (
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0" />
-          </svg>
-        ),
-        tooltip: 'Conectado a Internet',
-        bgColor: 'bg-success'
-      }
+  // Show banner on state degradation
+  useEffect(() => {
+    if (connState !== 'connected') {
+      setShowBanner(true)
     } else {
-      return {
-        icon: (
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z" />
-          </svg>
-        ),
-        tooltip: 'Sin conexión - Sistema funcionando offline',
-        bgColor: 'bg-warning animate-pulse'
-      }
+      // Auto-hide banner when recovered
+      setShowBanner(false)
     }
-  }
+  }, [connState])
 
-  const systemInfo = getSystemInfo()
+  const label = getStateLabel(connState)
+  const color = getStateColor(connState)
 
-  if (isOnline && !showOfflineMessage) {
-    return null
-  }
+  // Show indicator dot only when degraded
+  const showDot = connState !== 'connected'
 
   return (
     <>
-      {/* Botón de estado de red flotante */}
-      <button
-        className={`fixed top-20 right-6 z-40 p-3 rounded-full shadow-lg transition-all duration-200 hover:scale-110 group ${systemInfo.bgColor} text-bg`}
-        title={systemInfo.tooltip}
-      >
-        {systemInfo.icon}
-        <span className="absolute right-full mr-2 top-1/2 -translate-y-1/2 bg-bg border border-[rgba(56,139,253,0.3)] text-accent px-2 py-1 rounded text-xs whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity">
-          {systemInfo.tooltip}
-        </span>
-      </button>
+      {/* Floating status button — only visible when degraded */}
+      {showDot && (
+        <button
+          className={`fixed top-20 right-6 z-40 p-3 rounded-full shadow-lg transition-all duration-200 hover:scale-110 group ${color} text-bg`}
+          title={label}
+        >
+          {connState === 'no_internet' ? (
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z" />
+            </svg>
+          ) : (
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+            </svg>
+          )}
+          <span className="absolute right-full mr-2 top-1/2 -translate-y-1/2 bg-bg border border-[rgba(56,139,253,0.3)] text-accent px-2 py-1 rounded text-xs whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity">
+            {label}
+          </span>
+        </button>
+      )}
 
-      {/* Mensaje de notificación offline */}
-      {showOfflineMessage && !isOnline && (
-        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-50 bg-warning text-bg px-4 py-3 rounded-lg shadow-lg max-w-sm mx-4">
+      {/* Banner notification */}
+      {showBanner && connState !== 'connected' && (
+        <div className={`fixed top-24 left-1/2 -translate-x-1/2 z-50 px-4 py-3 rounded-lg shadow-lg max-w-sm mx-4 ${
+          connState === 'no_internet' ? 'bg-destructive text-bg' : 'bg-[#f0883e] text-bg'
+        }`}>
           <div className="flex items-center gap-3">
             <div className="flex-shrink-0">
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.314 16.5c-.77.833.192 2.5 1.732 2.5z" />
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
               </svg>
             </div>
             <div className="flex-1">
-              <p className="font-medium text-sm">⚠️ Sin conexión a Internet</p>
-              <p className="text-xs opacity-90 mt-1">🔄 RAULI-VISION sigue funcionando en modo offline</p>
-              <p className="text-xs opacity-80 mt-1">📱 Búsqueda local y caché activos</p>
+              <p className="font-medium text-sm">{label}</p>
+              <p className="text-xs opacity-90 mt-0.5">
+                {connState === 'no_internet'
+                  ? 'RAULI-VISION sigue funcionando en modo offline'
+                  : 'El servidor API no responde. Algunas funciones no estaran disponibles.'}
+              </p>
             </div>
             <button
-              onClick={handleDismissOfflineMessage}
+              onClick={() => setShowBanner(false)}
               className="text-bg hover:bg-white/20 rounded p-1 transition"
-              title="Cerrar notificación"
+              title="Cerrar"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

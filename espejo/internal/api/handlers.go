@@ -392,6 +392,9 @@ func (h *Handlers) GetChatHistory(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) getPopularCamiSongs(w http.ResponseWriter, r *http.Request) {
 	h.Cami.HandleGetPopularSongs(w, r)
 }
+func (h *Handlers) streamCamiSong(w http.ResponseWriter, r *http.Request) {
+	h.Cami.HandleStreamSong(w, r)
+}
 
 // Feedback AI handlers
 func (h *Handlers) processFeedback(w http.ResponseWriter, r *http.Request) {

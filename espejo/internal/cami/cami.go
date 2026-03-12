@@ -3,13 +3,18 @@ package cami
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 )
+
+const audioDir = "data/cami/audio"
 
 type Song struct {
 	ID          string    `json:"id"`
@@ -26,6 +31,7 @@ type Song struct {
 	Explicit    bool      `json:"explicit"`
 	TrackNumber *int      `json:"trackNumber,omitempty"`
 	ReleaseDate *string   `json:"releaseDate,omitempty"`
+	AudioPath   string    `json:"audio_path,omitempty"` // ruta relativa al archivo en disco
 	CreatedAt   time.Time `json:"createdAt"`
 	UpdatedAt   time.Time `json:"updatedAt"`
 }
@@ -475,60 +481,129 @@ func (s *Service) HandleUpload(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	
-	// Parse multipart form (max 50MB)
+
 	if err := r.ParseMultipartForm(50 << 20); err != nil {
-		http.Error(w, "Failed to parse form", http.StatusBadRequest)
+		http.Error(w, "Failed to parse form (max 50MB)", http.StatusBadRequest)
 		return
 	}
-	
-	file, handler, err := r.FormFile("audio")
+
+	// Acepta campo "file" (frontend) o "audio" (legacy)
+	file, handler, err := r.FormFile("file")
 	if err != nil {
-		http.Error(w, "No audio file provided", http.StatusBadRequest)
+		file, handler, err = r.FormFile("audio")
+	}
+	if err != nil {
+		http.Error(w, "No audio file provided (field: file)", http.StatusBadRequest)
 		return
 	}
 	defer file.Close()
-	
-	// Get form data
-	title := r.FormValue("title")
-	artist := r.FormValue("artist")
-	genre := r.FormValue("genre")
-	album := r.FormValue("album")
-	status := r.FormValue("status")
-	explicitStr := r.FormValue("explicit")
-	
-	explicit := explicitStr == "true"
-	
-	// Create song record
+
+	title    := r.FormValue("title")
+	artist   := r.FormValue("artist")
+	genre    := r.FormValue("genre")
+	album    := r.FormValue("album")
+	status   := r.FormValue("status")
+	explicit := r.FormValue("explicit") == "true"
+
+	if title == "" {
+		title = strings.TrimSuffix(handler.Filename, filepath.Ext(handler.Filename))
+	}
+	if status == "" {
+		status = "draft"
+	}
+
+	// Crear directorio de audio si no existe
+	if err := os.MkdirAll(audioDir, 0755); err != nil {
+		http.Error(w, "Cannot create audio directory", http.StatusInternalServerError)
+		return
+	}
+
+	// Generar ID único y guardar archivo
+	id := fmt.Sprintf("%d", time.Now().UnixNano())
+	ext := strings.ToLower(filepath.Ext(handler.Filename))
+	if ext == "" { ext = ".mp3" }
+	audioFilename := id + ext
+	audioPath := filepath.Join(audioDir, audioFilename)
+
+	dst, err := os.Create(audioPath)
+	if err != nil {
+		http.Error(w, "Cannot save audio file", http.StatusInternalServerError)
+		return
+	}
+	defer dst.Close()
+	if _, err := io.Copy(dst, file); err != nil {
+		http.Error(w, "Failed to write audio file", http.StatusInternalServerError)
+		return
+	}
+
+	format := strings.ToUpper(strings.TrimPrefix(ext, "."))
 	song := Song{
+		ID:         id,
 		Title:      title,
 		Artist:     artist,
 		FileSize:   fmt.Sprintf("%.1f MB", float64(handler.Size)/1024/1024),
-		Format:     strings.ToUpper(handler.Filename[strings.LastIndex(handler.Filename, ".")+1:]),
+		Format:     format,
 		Status:     status,
 		UploadDate: time.Now().Format("2006-01-02"),
 		Explicit:   explicit,
 		Plays:      0,
+		AudioPath:  audioPath,
 	}
-	
-	if genre != "" {
-		song.Genre = &genre
-	}
-	if album != "" {
-		song.Album = &album
-	}
-	
+	if genre != "" { song.Genre = &genre }
+	if album != "" { song.Album = &album }
+
 	created, err := s.CreateSong(song)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	
-	log.Printf("Uploaded song: %s (%s)", created.Title, created.FileSize)
-	
+
+	log.Printf("Uploaded song: %s (%s) → %s", created.Title, created.FileSize, audioPath)
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(created)
+}
+
+// HandleStreamSong sirve el archivo de audio directamente al cliente.
+// Soporta Range requests para que el reproductor HTML5 pueda hacer seek.
+func (s *Service) HandleStreamSong(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimPrefix(r.URL.Path, "/api/cami/stream/")
+	id = strings.TrimSuffix(id, "/")
+
+	song, exists := s.GetSong(id)
+	if !exists {
+		http.Error(w, "Song not found", http.StatusNotFound)
+		return
+	}
+	if song.AudioPath == "" {
+		http.Error(w, "No audio file for this song", http.StatusNotFound)
+		return
+	}
+
+	f, err := os.Open(song.AudioPath)
+	if err != nil {
+		http.Error(w, "Audio file not accessible", http.StatusNotFound)
+		return
+	}
+	defer f.Close()
+
+	ext := strings.ToLower(filepath.Ext(song.AudioPath))
+	ct := map[string]string{
+		".mp3":  "audio/mpeg",
+		".wav":  "audio/wav",
+		".flac": "audio/flac",
+		".m4a":  "audio/mp4",
+		".ogg":  "audio/ogg",
+	}[ext]
+	if ct == "" { ct = "audio/mpeg" }
+
+	w.Header().Set("Content-Type", ct)
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Accept-Ranges", "bytes")
+
+	fi, _ := f.Stat()
+	http.ServeContent(w, r, song.AudioPath, fi.ModTime(), f)
 }
 
 func (s *Service) HandleGetPopularSongs(w http.ResponseWriter, r *http.Request) {

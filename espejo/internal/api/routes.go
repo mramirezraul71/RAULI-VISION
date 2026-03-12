@@ -73,6 +73,7 @@ func Register(mux *http.ServeMux, version string, authSvc *auth.Service, searchS
 	mux.HandleFunc("GET /api/cami/search", chain(h.searchCami))
 	mux.HandleFunc("POST /api/cami/upload", chain(h.uploadCami))
 	mux.HandleFunc("GET /api/cami/popular", chain(h.getPopularCamiSongs))
+	mux.HandleFunc("GET /api/cami/stream/", h.streamCamiSong) // stream sin brotli: audio binario
 
 	// Feedback AI routes
 	mux.HandleFunc("POST /api/feedback/brain", chain(h.processFeedback))

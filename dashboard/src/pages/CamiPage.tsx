@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   CamiSong,
@@ -8,6 +8,7 @@ import {
   camiGetSongs,
   camiGetStats,
   camiPlaySong,
+  camiStreamUrl,
   camiUpdateSong,
   camiUpload,
 } from '../api/client'
@@ -23,6 +24,42 @@ export function CamiPage() {
   const { data: stats } = useQuery({ queryKey: ['cami-stats'], queryFn: camiGetStats })
 
   const invalidate = () => { qc.invalidateQueries({ queryKey: ['cami-songs'] }); qc.invalidateQueries({ queryKey: ['cami-stats'] }) }
+
+  // ── Reproductor de audio ──
+  const audioRef = useRef<HTMLAudioElement>(null)
+  const [nowPlaying, setNowPlaying] = useState<CamiSong | null>(null)
+  const [isPlaying, setIsPlaying] = useState(false)
+  const [progress, setProgress] = useState(0)
+  const [duration, setDuration] = useState(0)
+
+  useEffect(() => {
+    const el = audioRef.current
+    if (!el) return
+    const onTime = () => setProgress(el.currentTime)
+    const onDur  = () => setDuration(el.duration || 0)
+    const onEnd  = () => setIsPlaying(false)
+    el.addEventListener('timeupdate', onTime)
+    el.addEventListener('loadedmetadata', onDur)
+    el.addEventListener('ended', onEnd)
+    return () => { el.removeEventListener('timeupdate', onTime); el.removeEventListener('loadedmetadata', onDur); el.removeEventListener('ended', onEnd) }
+  }, [])
+
+  const playSong = (song: CamiSong) => {
+    const el = audioRef.current
+    if (!el) return
+    if (nowPlaying?.id === song.id) {
+      isPlaying ? el.pause() : el.play()
+      setIsPlaying(!isPlaying)
+      return
+    }
+    el.src = camiStreamUrl(song.id)
+    el.load()
+    el.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false))
+    setNowPlaying(song)
+    playMut.mutate(song.id) // incrementa contador
+  }
+
+  const fmtTime = (s: number) => `${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,'0')}`
 
   // ── Delete ──
   const deleteMut = useMutation({
@@ -126,9 +163,16 @@ export function CamiPage() {
                           <input autoFocus defaultValue={song.title} onBlur={e => setEditing({ ...editing, title: e.target.value })}
                             className="bg-bg border border-accent/50 rounded px-2 py-1 text-sm w-full focus:outline-none" />
                         ) : (
-                          <div>
-                            <div className="font-medium text-[#e6edf3] cursor-pointer" onClick={() => playMut.mutate(song.id)}>{song.title}</div>
-                            <div className="text-xs text-muted">{song.artist}{song.genre ? ` • ${song.genre}` : ''}</div>
+                          <div className="flex items-center gap-2">
+                            <button onClick={() => playSong(song)}
+                              className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 transition ${nowPlaying?.id === song.id && isPlaying ? 'bg-accent text-bg' : 'bg-accent/20 text-accent hover:bg-accent/40'}`}
+                              title={nowPlaying?.id === song.id && isPlaying ? 'Pausar' : 'Reproducir'}>
+                              {nowPlaying?.id === song.id && isPlaying ? '⏸' : '▶'}
+                            </button>
+                            <div>
+                              <div className="font-medium text-[#e6edf3]">{song.title}</div>
+                              <div className="text-xs text-muted">{song.artist}{song.genre ? ` • ${song.genre}` : ''}</div>
+                            </div>
                           </div>
                         )}
                       </td>
@@ -326,6 +370,40 @@ export function CamiPage() {
               </div>
             ))}
             {songs.length === 0 && <p className="text-muted text-sm text-center py-4">Sin datos aún</p>}
+          </div>
+        </div>
+      )}
+
+      {/* ── Reproductor flotante ── */}
+      <audio ref={audioRef} preload="none" />
+      {nowPlaying && (
+        <div className="fixed bottom-0 left-0 right-0 bg-[rgba(13,17,23,0.97)] border-t border-purple-500/30 px-4 py-3 z-50 backdrop-blur">
+          <div className="max-w-4xl mx-auto flex items-center gap-4">
+            {/* Info canción */}
+            <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center text-sm font-bold text-bg flex-shrink-0">♪</div>
+            <div className="flex-1 min-w-0">
+              <div className="font-medium text-[#e6edf3] truncate">{nowPlaying.title}</div>
+              <div className="text-xs text-muted">{nowPlaying.artist}</div>
+            </div>
+
+            {/* Controles */}
+            <div className="flex items-center gap-3 flex-shrink-0">
+              <button onClick={() => { const el = audioRef.current; if (!el) return; isPlaying ? el.pause() : el.play(); setIsPlaying(!isPlaying) }}
+                className="w-10 h-10 bg-accent rounded-full flex items-center justify-center text-bg hover:bg-accent/80 transition text-lg">
+                {isPlaying ? '⏸' : '▶'}
+              </button>
+              <button onClick={() => { audioRef.current?.pause(); setNowPlaying(null); setIsPlaying(false); setProgress(0) }}
+                className="w-8 h-8 rounded-full flex items-center justify-center text-muted hover:text-[#e6edf3] transition">✕</button>
+            </div>
+
+            {/* Barra de progreso */}
+            <div className="flex items-center gap-2 flex-1 min-w-0 max-w-xs">
+              <span className="text-xs text-muted flex-shrink-0">{fmtTime(progress)}</span>
+              <input type="range" min={0} max={duration || 1} step={0.5} value={progress}
+                onChange={e => { const t = Number(e.target.value); if (audioRef.current) audioRef.current.currentTime = t; setProgress(t) }}
+                className="flex-1 accent-purple-500 cursor-pointer" />
+              <span className="text-xs text-muted flex-shrink-0">{fmtTime(duration)}</span>
+            </div>
           </div>
         </div>
       )}

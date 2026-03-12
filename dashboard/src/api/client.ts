@@ -324,6 +324,9 @@ export async function camiSearch(q: string): Promise<CamiSong[]> {
   if (!r.ok) throw new Error('Búsqueda fallida')
   return r.json()
 }
+export function camiStreamUrl(id: string): string {
+  return `${BASE}/api/cami/stream/${encodeURIComponent(id)}`
+}
 
 export async function chatHistory(): Promise<{ items: { id: string; role: string; preview: string; ts: string }[] }> {
   const r = await fetch(`${BASE}/api/chat/history`)
@@ -400,5 +403,16 @@ export async function updateAccessUserStatus(id: string, status: 'active' | 'dis
     body: JSON.stringify({ status }),
   })
   if (!r.ok) throw new Error(await parseError(r, 'No se pudo actualizar el usuario.'))
+  return r.json()
+}
+
+export async function processFeedback(data: {
+  type: string; severity: string; title: string; description: string
+  screenshot?: string; systemInfo?: Record<string, unknown>
+}): Promise<{ ok: boolean; analysis?: string; estimated_fix_time?: string; auto_fix?: boolean }> {
+  const r = await fetch('/api/feedback/brain', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data)
+  })
+  if (!r.ok) throw new Error(await parseError(r, 'Error al enviar feedback'))
   return r.json()
 }

@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { videoChannelsHealth, videoMeta, videoSearch } from '../api/client'
 
 const CATEGORY_ORDER = [
@@ -32,13 +32,25 @@ function formatDuration(sec: number) {
   return `${m}:${s.toString().padStart(2, '0')}`
 }
 
+function formatTimestamp(iso?: string) {
+  if (!iso) return null
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+}
+
 export function VideoPage() {
+  const queryClient = useQueryClient()
   const [q, setQ] = useState('')
   const [query, setQuery] = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [scope, setScope] = useState<'all' | 'cuba' | 'internacional'>('all')
+  const [cubaMode, setCubaMode] = useState(false)
+  const [autoRefresh, setAutoRefresh] = useState(false)
+  const [lastHealthCheck, setLastHealthCheck] = useState<string | null>(null)
+  const autoRefreshRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  const { data: list, isFetching: listLoading } = useQuery({
+  const { data: list, isFetching: listLoading, refetch: refetchList } = useQuery({
     queryKey: ['videoSearch', query],
     queryFn: () => videoSearch(query, 30),
     staleTime: 60_000,
@@ -53,7 +65,32 @@ export function VideoPage() {
 
   const healthMutation = useMutation({
     mutationFn: () => videoChannelsHealth(12, 'cuba'),
+    onSuccess: () => {
+      setLastHealthCheck(new Date().toISOString())
+    },
   })
+
+  // Auto-refresh: poll health every 60s when enabled
+  useEffect(() => {
+    if (autoRefresh) {
+      healthMutation.mutate()
+      autoRefreshRef.current = setInterval(() => {
+        healthMutation.mutate()
+      }, 60_000)
+    } else {
+      if (autoRefreshRef.current) {
+        clearInterval(autoRefreshRef.current)
+        autoRefreshRef.current = null
+      }
+    }
+    return () => {
+      if (autoRefreshRef.current) {
+        clearInterval(autoRefreshRef.current)
+        autoRefreshRef.current = null
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoRefresh])
 
   useEffect(() => {
     if (!selectedId && list?.results?.length) {
@@ -73,12 +110,10 @@ export function VideoPage() {
       const catLower = category.toLowerCase()
       const isCuba = catLower.includes('cuba')
       const isInternacional = catLower.includes('internacional')
-      if (scope === 'cuba' && !isCuba) {
-        continue
-      }
-      if (scope === 'internacional' && !isInternacional) {
-        continue
-      }
+      if (scope === 'cuba' && !isCuba) continue
+      if (scope === 'internacional' && !isInternacional) continue
+      // Cuba Mode filter: only show cuba_ready channels
+      if (cubaMode && !item.cuba_ready) continue
       const existing = groups.get(category)
       if (existing) {
         existing.push(item)
@@ -94,7 +129,15 @@ export function VideoPage() {
       if (aOrder !== bOrder) return aOrder - bOrder
       return a[0].localeCompare(b[0])
     })
-  }, [list, scope])
+  }, [list, scope, cubaMode])
+
+  const handleVerTodo = () => {
+    setQ('')
+    setQuery('')
+    // Explicitly invalidate and refetch to ensure fresh results
+    queryClient.invalidateQueries({ queryKey: ['videoSearch', ''] })
+    refetchList()
+  }
 
   return (
     <div className="space-y-6">
@@ -123,10 +166,7 @@ export function VideoPage() {
           <button
             type="button"
             className="rounded-lg border border-[rgba(56,139,253,0.4)] px-4 py-2.5 text-sm text-muted hover:text-accent hover:border-accent/50"
-            onClick={() => {
-              setQ('')
-              setQuery('')
-            }}
+            onClick={handleVerTodo}
           >
             Ver todo
           </button>
@@ -167,6 +207,20 @@ export function VideoPage() {
             }`}
           >
             Solo Internacional
+          </button>
+
+          {/* Cuba Mode toggle */}
+          <button
+            type="button"
+            onClick={() => setCubaMode((v) => !v)}
+            className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ml-auto ${
+              cubaMode
+                ? 'border-green-400/60 bg-green-500/20 text-green-300'
+                : 'border-[rgba(34,197,94,0.3)] text-muted hover:text-green-300 hover:border-green-400/40'
+            }`}
+            title="Mostrar solo canales listos para Cuba"
+          >
+            {cubaMode ? 'Cuba Mode: ON' : 'Cuba Mode'}
           </button>
         </div>
         {listLoading && <Skeleton />}
@@ -212,7 +266,7 @@ export function VideoPage() {
         )}
         {!listLoading && list && list.results.length > 0 && groupedChannels.length === 0 && (
           <p className="text-sm text-muted">
-            No hay canales en este alcance. Cambie a <strong>Todo</strong> o use otro filtro.
+            No hay canales en este alcance. {cubaMode && 'Desactive Cuba Mode o '}Cambie a <strong>Todo</strong> o use otro filtro.
           </p>
         )}
       </section>
@@ -250,26 +304,54 @@ export function VideoPage() {
           <div>
             <h3 className="text-accent font-semibold">Chequeo profesional de canales</h3>
             <p className="text-muted text-sm">Verifica disponibilidad desde el servidor usando la misma ruta de la app.</p>
+            {lastHealthCheck && (
+              <p className="text-xs text-muted mt-1">
+                Ultimo chequeo: {formatTimestamp(lastHealthCheck)}
+              </p>
+            )}
           </div>
-          <button
-            onClick={() => healthMutation.mutate()}
-            disabled={healthMutation.isPending}
-            className="rounded-lg bg-accent/20 text-accent px-4 py-2 font-medium hover:bg-accent/30 disabled:opacity-60"
-          >
-            {healthMutation.isPending ? 'Comprobando...' : 'Comprobar ahora'}
-          </button>
+          <div className="flex flex-wrap gap-2">
+            {/* Auto-refresh toggle */}
+            <button
+              type="button"
+              onClick={() => setAutoRefresh((v) => !v)}
+              className={`rounded-lg border px-3 py-2 text-sm font-medium transition ${
+                autoRefresh
+                  ? 'border-green-400/50 bg-green-500/15 text-green-300 hover:bg-green-500/25'
+                  : 'border-[rgba(56,139,253,0.3)] text-muted hover:text-accent hover:border-accent/50'
+              }`}
+              title="Refresco automático cada 60 segundos"
+            >
+              {autoRefresh ? 'Auto-refresh: ON' : 'Auto-refresh'}
+            </button>
+            <button
+              onClick={() => healthMutation.mutate()}
+              disabled={healthMutation.isPending}
+              className="rounded-lg bg-accent/20 text-accent px-4 py-2 font-medium hover:bg-accent/30 disabled:opacity-60"
+            >
+              {healthMutation.isPending ? 'Comprobando...' : 'Comprobar ahora'}
+            </button>
+          </div>
         </div>
 
         {healthMutation.data && (
           <div className="mt-4 space-y-3">
             <p className="text-sm text-muted">
               Resultado: {healthMutation.data.reachable}/{healthMutation.data.total} accesibles ({healthMutation.data.mode})
+              {healthMutation.data.unavailable > 0 && (
+                <span className="text-red-400 ml-2">{healthMutation.data.unavailable} no disponibles</span>
+              )}
             </p>
             <div className="space-y-2">
               {healthMutation.data.items.map((item) => (
                 <div key={item.id} className="rounded-lg border border-[rgba(56,139,253,0.2)] p-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="font-medium">{item.title}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">{item.title}</span>
+                      {item.cuba_ready && (
+                        <span className="rounded-full px-2 py-0.5 text-xs bg-green-500/15 text-green-300">Cuba OK</span>
+                      )}
+                    </div>
                     <span className={`text-xs rounded-full px-2 py-0.5 ${item.reachable ? 'bg-green-500/15 text-green-300' : 'bg-red-500/15 text-red-300'}`}>
                       {item.reachable ? `OK (${item.status_code})` : `Fallo (${item.status_code || 'sin codigo'})`}
                     </span>

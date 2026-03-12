@@ -1,11 +1,12 @@
 export const APP_VERSION =
-  typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '1.1.0'
+  typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '1.2.0'
 
-export const CHANGELOG = `## v1.1.0 — TikTok Cuba + correcciones
+export const CHANGELOG = `## v1.2.0 — Dashboard improvements
 
-• Nuevo módulo TikTok: acceso vía espejo para usuarios en Cuba
-• Proxy multicapa: Cobalt API → tikwm.com → yt-dlp (sin instalar nada)
-• Compilaciones TikTok vía YouTube accesibles desde Cuba
-• Corrección de etiquetas en el menú (IA, CAMI)
-• Proxy siempre disponible sin dependencias locales`
+• FeedbackAI: useMutation, screenshot base64, char counter, image preview, rate limiting, AI result card, error permanente
+• AccessPage: auto-copy códigos, timestamps relativos, bulk approve/reject, exportar JSON, empty states, queries invalidadas tras mutación
+• VideoPage: "Ver todo" refetch explícito, auto-refresh toggle (60s), Cuba Mode filter, timestamp último chequeo
+• ChatPage: borrar historial, cargar contexto desde historial, copiar respuesta, fuentes expandibles, atajo Ctrl+Enter
+• NetworkStatus: ping /api/health cada 30s, tres estados (Conectado / Servidor no disponible / Sin internet), colores diferenciados
+• client.ts: nueva función processFeedback para /api/feedback/brain`
   .trim()
