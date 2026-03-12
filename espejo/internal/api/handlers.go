@@ -2,10 +2,12 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/access"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/atlas"
@@ -498,25 +500,84 @@ func (h *Handlers) GetTikTokStream(w http.ResponseWriter, r *http.Request) {
 	h.TikTok.ProxyStream(w, streamURL)
 }
 
-// GetTikTokTrending devuelve el feed de tendencias globales de TikTok.
-// Query params: count (default 20), cursor (paginación)
+// GetTikTokTrending devuelve el feed de tendencias desde caché (o lo obtiene si está vacío).
 func (h *Handlers) GetTikTokTrending(w http.ResponseWriter, r *http.Request) {
-	count, _ := strconv.Atoi(r.URL.Query().Get("count"))
-	cursor := r.URL.Query().Get("cursor")
 	if h.TikTok == nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "service_unavailable", "message": "Servicio TikTok no disponible"})
 		return
 	}
-	items, nextCursor, hasMore, err := h.TikTok.FetchTrending(count, cursor)
-	if err != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "fetch_failed", "message": err.Error()})
-		return
+	items, cachedAt := h.TikTok.TrendingCached()
+	// Si el caché está vacío, hacer llamada directa
+	if len(items) == 0 {
+		count, _ := strconv.Atoi(r.URL.Query().Get("count"))
+		var err error
+		items, _, _, err = h.TikTok.FetchTrending(count, "")
+		if err != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]string{"error": "fetch_failed", "message": err.Error()})
+			return
+		}
+		cachedAt = time.Now()
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"items":    items,
-		"cursor":   nextCursor,
-		"has_more": hasMore,
+		"items":     items,
+		"cursor":    "",
+		"has_more":  false,
+		"cached_at": cachedAt.Format(time.RFC3339),
 	})
+}
+
+// GetTikTokTrendingLive implementa SSE: envía el caché actual y luego empuja cada
+// actualización automática al cliente en tiempo real (sin que el cliente haga polling).
+func (h *Handlers) GetTikTokTrendingLive(w http.ResponseWriter, r *http.Request) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming no soportado", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("X-Accel-Buffering", "no") // deshabilita buffering en nginx/cloudflare
+
+	// Enviar caché actual inmediatamente
+	if items, cachedAt := h.TikTok.TrendingCached(); len(items) > 0 {
+		payload, _ := json.Marshal(map[string]interface{}{
+			"type":      "initial",
+			"items":     items,
+			"cached_at": cachedAt.Format(time.RFC3339),
+		})
+		fmt.Fprintf(w, "data: %s\n\n", payload)
+		flusher.Flush()
+	}
+
+	ch := h.TikTok.TrendingSubscribe()
+	defer h.TikTok.TrendingUnsubscribe(ch)
+
+	heartbeat := time.NewTicker(25 * time.Second)
+	defer heartbeat.Stop()
+
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case <-heartbeat.C:
+			fmt.Fprintf(w, ": ping\n\n")
+			flusher.Flush()
+		case newItems, alive := <-ch:
+			if !alive {
+				return
+			}
+			payload, _ := json.Marshal(map[string]interface{}{
+				"type":      "update",
+				"items":     newItems,
+				"cached_at": time.Now().Format(time.RFC3339),
+			})
+			fmt.Fprintf(w, "data: %s\n\n", payload)
+			flusher.Flush()
+		}
+	}
 }
 
 // GetTikTokSearch busca videos de TikTok por palabras clave.

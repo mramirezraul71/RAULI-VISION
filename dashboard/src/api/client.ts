@@ -236,10 +236,30 @@ export type TikTokFeedResponse = {
   has_more: boolean
 }
 
-export async function tiktokTrending(count = 20, cursor = ''): Promise<TikTokFeedResponse> {
+export async function tiktokTrending(count = 20, cursor = ''): Promise<TikTokFeedResponse & { cached_at?: string }> {
   const r = await fetch(`${BASE}/api/tiktok/trending?count=${count}&cursor=${encodeURIComponent(cursor)}`)
   if (!r.ok) throw new Error('No se pudieron cargar las tendencias de TikTok')
   return r.json()
+}
+
+/** Abre un EventSource SSE para recibir actualizaciones automáticas de tendencias. */
+export function tiktokTrendingLive(
+  onInitial: (items: TikTokFeedItem[], cachedAt: string) => void,
+  onUpdate: (items: TikTokFeedItem[], cachedAt: string) => void,
+): EventSource {
+  const es = new EventSource(`${BASE}/api/tiktok/trending/live`)
+  es.onmessage = (event) => {
+    try {
+      const payload = JSON.parse(event.data) as {
+        type: 'initial' | 'update'
+        items: TikTokFeedItem[]
+        cached_at: string
+      }
+      if (payload.type === 'initial') onInitial(payload.items, payload.cached_at)
+      else if (payload.type === 'update') onUpdate(payload.items, payload.cached_at)
+    } catch { /* ignore parse errors */ }
+  }
+  return es
 }
 
 export async function tiktokSearch(q: string, count = 20, cursor = ''): Promise<TikTokFeedResponse & { query: string }> {

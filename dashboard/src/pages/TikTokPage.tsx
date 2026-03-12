@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import {
   tiktokFetch, tiktokStatus, tiktokStreamUrl,
-  tiktokTrending, tiktokSearch,
+  tiktokTrendingLive, tiktokSearch,
   type TikTokVideoInfo, type TikTokFeedItem,
 } from '../api/client'
 
@@ -163,76 +163,105 @@ function ProxyStatusBadge() {
 // ─── tendencias tab ───────────────────────────────────────────────────────────
 
 function TrendingTab({ onPlay }: { onPlay: (item: TikTokFeedItem) => void }) {
-  const [cursor, setCursor] = useState('')
-  const [allItems, setAllItems] = useState<TikTokFeedItem[]>([])
-  const [nextCursor, setNextCursor] = useState('')
-  const [hasMore, setHasMore] = useState(false)
-
-  const { data, isLoading, isError, error, refetch } = useQuery({
-    queryKey: ['tiktokTrending', cursor],
-    queryFn: () => tiktokTrending(20, cursor),
-    staleTime: 5 * 60_000,
-  })
+  const [items, setItems] = useState<TikTokFeedItem[]>([])
+  const [pending, setPending] = useState<TikTokFeedItem[]>([])
+  const [cachedAt, setCachedAt] = useState<string | null>(null)
+  const [connected, setConnected] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!data) return
-    setAllItems(prev => cursor ? [...prev, ...data.items] : data.items)
-    setNextCursor(data.cursor)
-    setHasMore(data.has_more)
-  }, [data]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const loadMore = () => setCursor(nextCursor)
-
-  if (isLoading && allItems.length === 0) {
-    return (
-      <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4">
-        {Array.from({ length: 8 }).map((_, i) => (
-          <div key={i} className="rounded-xl border border-[rgba(56,139,253,0.1)] bg-[rgba(22,27,34,0.6)] overflow-hidden animate-pulse">
-            <div className="aspect-[9/16] max-h-52 bg-[rgba(56,139,253,0.06)]" />
-            <div className="p-3 space-y-2">
-              <div className="h-3 bg-[rgba(56,139,253,0.1)] rounded w-3/4" />
-              <div className="h-2.5 bg-[rgba(56,139,253,0.07)] rounded w-1/2" />
-            </div>
-          </div>
-        ))}
-      </div>
+    setError(null)
+    const es = tiktokTrendingLive(
+      (newItems, at) => {
+        setItems(newItems)
+        setCachedAt(at)
+        setConnected(true)
+        setError(null)
+      },
+      (newItems, at) => {
+        // Si aún no hay nada mostrado, cargar directamente; si ya hay items, mostrar banner
+        setItems(prev => {
+          if (prev.length === 0) { setCachedAt(at); return newItems }
+          setPending(newItems)
+          setCachedAt(at)
+          return prev
+        })
+      },
     )
+    es.onerror = () => {
+      setConnected(false)
+      setError('Conexión perdida con el servidor. Reconectando...')
+    }
+    return () => es.close()
+  }, [])
+
+  const applyPending = () => {
+    setItems(pending)
+    setPending([])
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
-  if (isError && allItems.length === 0) {
+  // Skeleton mientras carga
+  if (!connected && items.length === 0) {
     return (
-      <div className="rounded-xl border border-red-400/25 bg-red-500/8 p-6 text-center space-y-3">
-        <p className="text-red-300 text-sm">{error instanceof Error ? error.message : 'No se pudieron cargar las tendencias'}</p>
-        <button onClick={() => refetch()} className="rounded-lg border border-red-400/30 text-red-300 text-xs px-4 py-1.5 hover:bg-red-500/12 transition">
-          Reintentar
-        </button>
+      <div className="space-y-3">
+        <div className="flex items-center gap-2 text-xs text-muted animate-pulse">
+          <span className="h-2 w-2 rounded-full bg-accent/50 inline-block" />
+          Conectando al feed en tiempo real...
+        </div>
+        {error && (
+          <div className="rounded-xl border border-red-400/25 bg-red-500/8 px-4 py-3 text-sm text-red-300">{error}</div>
+        )}
+        <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <div key={i} className="rounded-xl border border-[rgba(56,139,253,0.1)] bg-[rgba(22,27,34,0.6)] overflow-hidden animate-pulse">
+              <div className="aspect-[9/16] max-h-52 bg-[rgba(56,139,253,0.06)]" />
+              <div className="p-3 space-y-2">
+                <div className="h-3 bg-[rgba(56,139,253,0.1)] rounded w-3/4" />
+                <div className="h-2.5 bg-[rgba(56,139,253,0.07)] rounded w-1/2" />
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     )
   }
 
   return (
     <div className="space-y-4">
+      {/* Barra de estado del feed en tiempo real */}
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-center gap-2 text-xs">
+          <span className={`h-2 w-2 rounded-full inline-block ${connected ? 'bg-green-400 animate-pulse' : 'bg-yellow-400'}`} />
+          <span className="text-muted">
+            {connected ? 'Feed en vivo' : 'Reconectando...'}
+          </span>
+          {cachedAt && (
+            <span className="text-muted/50">
+              · actualizado {new Date(cachedAt).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}
+            </span>
+          )}
+        </div>
+        <span className="text-xs text-muted/50">Se actualiza cada 5 min · via espejo</span>
+      </div>
+
+      {/* Banner de nuevos videos disponibles */}
+      {pending.length > 0 && (
+        <button
+          onClick={applyPending}
+          className="w-full rounded-xl border border-accent/40 bg-accent/10 px-4 py-3 text-sm text-accent font-semibold hover:bg-accent/18 active:scale-[0.99] transition flex items-center justify-center gap-2"
+        >
+          <span className="h-2 w-2 rounded-full bg-accent animate-ping inline-block" />
+          {pending.length} nuevos videos disponibles — toca para actualizar
+        </button>
+      )}
+
+      {/* Grid */}
       <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4">
-        {allItems.map((item) => (
+        {items.map((item) => (
           <VideoCard key={item.id} item={item} onPlay={onPlay} />
         ))}
       </div>
-      {hasMore && (
-        <div className="flex justify-center pt-2">
-          <button
-            onClick={loadMore}
-            disabled={isLoading}
-            className="rounded-xl border border-accent/30 bg-accent/8 text-accent px-6 py-2.5 text-sm font-semibold hover:bg-accent/18 disabled:opacity-50 active:scale-95 transition"
-          >
-            {isLoading ? (
-              <span className="flex items-center gap-2">
-                <span className="h-3.5 w-3.5 rounded-full border-2 border-accent border-t-transparent animate-spin" />
-                Cargando...
-              </span>
-            ) : 'Cargar más'}
-          </button>
-        </div>
-      )}
     </div>
   )
 }

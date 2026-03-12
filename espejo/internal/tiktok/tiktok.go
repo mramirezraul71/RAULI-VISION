@@ -41,6 +41,12 @@ type Service struct {
 	cacheTTL  time.Duration
 	ytdlpPath string
 	client    *http.Client
+
+	// Trending auto-refresh + broadcast en tiempo real
+	trendMu      sync.RWMutex
+	trendItems   []FeedItem
+	trendRefresh time.Time
+	bc           *trendBroadcaster
 }
 
 type cacheEntry struct {
@@ -48,14 +54,91 @@ type cacheEntry struct {
 	expiresAt time.Time
 }
 
-// New crea un nuevo Service.
-func New() *Service {
-	return &Service{
-		cache:     make(map[string]cacheEntry),
-		cacheTTL:  10 * time.Minute,
-		ytdlpPath: detectYtdlp(),
-		client:    &http.Client{Timeout: 20 * time.Second},
+// trendBroadcaster distribuye actualizaciones de tendencias a todos los clientes SSE.
+type trendBroadcaster struct {
+	mu      sync.Mutex
+	clients map[chan []FeedItem]struct{}
+}
+
+func (b *trendBroadcaster) add(ch chan []FeedItem) {
+	b.mu.Lock()
+	b.clients[ch] = struct{}{}
+	b.mu.Unlock()
+}
+
+func (b *trendBroadcaster) remove(ch chan []FeedItem) {
+	b.mu.Lock()
+	delete(b.clients, ch)
+	b.mu.Unlock()
+	close(ch)
+}
+
+func (b *trendBroadcaster) send(items []FeedItem) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	for ch := range b.clients {
+		select {
+		case ch <- items:
+		default: // cliente lento — skip
+		}
 	}
+}
+
+// New crea un nuevo Service e inicia el bucle de refresco automático de tendencias.
+func New() *Service {
+	s := &Service{
+		cache:    make(map[string]cacheEntry),
+		cacheTTL: 10 * time.Minute,
+		ytdlpPath: detectYtdlp(),
+		client:   &http.Client{Timeout: 20 * time.Second},
+		bc:       &trendBroadcaster{clients: make(map[chan []FeedItem]struct{})},
+	}
+	go s.trendRefreshLoop()
+	return s
+}
+
+// trendRefreshLoop mantiene el caché de tendencias actualizado y notifica a suscriptores.
+func (s *Service) trendRefreshLoop() {
+	// Esperar un momento antes de la primera carga para que el servidor termine de arrancar
+	time.Sleep(3 * time.Second)
+	s.doTrendRefresh()
+
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+	for range ticker.C {
+		s.doTrendRefresh()
+	}
+}
+
+func (s *Service) doTrendRefresh() {
+	items, _, _, err := s.FetchTrending(20, "")
+	if err != nil || len(items) == 0 {
+		return
+	}
+	s.trendMu.Lock()
+	s.trendItems = items
+	s.trendRefresh = time.Now()
+	s.trendMu.Unlock()
+	s.bc.send(items)
+}
+
+// TrendingCached devuelve los últimos items de tendencias cacheados.
+func (s *Service) TrendingCached() ([]FeedItem, time.Time) {
+	s.trendMu.RLock()
+	defer s.trendMu.RUnlock()
+	return s.trendItems, s.trendRefresh
+}
+
+// TrendingSubscribe devuelve un canal que recibe actualizaciones de tendencias.
+func (s *Service) TrendingSubscribe() chan []FeedItem {
+	ch := make(chan []FeedItem, 2)
+	s.bc.add(ch)
+	return ch
+}
+
+// TrendingUnsubscribe cancela la suscripción y cierra el canal.
+func (s *Service) TrendingUnsubscribe(ch chan []FeedItem) {
+	s.bc.remove(ch)
 }
 
 // Available siempre devuelve true: Cobalt y tikwm no requieren instalación local.

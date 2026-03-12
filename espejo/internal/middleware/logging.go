@@ -54,3 +54,11 @@ func (r *responseRecorder) WriteHeader(code int) {
 	r.status = code
 	r.ResponseWriter.WriteHeader(code)
 }
+
+// Flush implementa http.Flusher delegando al ResponseWriter subyacente.
+// Necesario para SSE y stream endpoints que usan este middleware.
+func (r *responseRecorder) Flush() {
+	if f, ok := r.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
