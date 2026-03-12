@@ -14,6 +14,7 @@ import (
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/chat"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/feedback"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/search"
+	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/tiktok"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/validate"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/video"
 )
@@ -26,6 +27,7 @@ type Handlers struct {
 	Cami       *cami.Service
 	Feedback   *feedback.Service
 	Access     *access.Service
+	TikTok     *tiktok.Service
 	Version    string
 	AdminToken string
 }
@@ -424,6 +426,73 @@ func (h *Handlers) authorizeAdmin(w http.ResponseWriter, r *http.Request) bool {
 		return false
 	}
 	return true
+}
+
+// ── TikTok proxy handlers ─────────────────────────────────────────────────────
+// Permiten a usuarios en Cuba (donde tiktok.com está geo-restringido) acceder
+// a videos de TikTok a través del espejo, que sí tiene acceso.
+
+// GetTikTokStatus informa si yt-dlp está disponible en el espejo.
+func (h *Handlers) GetTikTokStatus(w http.ResponseWriter, r *http.Request) {
+	available := h.TikTok != nil && h.TikTok.Available()
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"available":   available,
+		"cuba_bypass": true,
+		"description": "Proxy de TikTok para regiones con acceso restringido (Cuba). Usa /api/tiktok/fetch?url=<tiktok_url>",
+		"note":        map[bool]string{true: "yt-dlp detectado — proxy operativo", false: "yt-dlp no instalado — instala con: pip install yt-dlp"}[available],
+	})
+}
+
+// GetTikTokFetch extrae metadatos y URL de stream de un video TikTok.
+// Query param: url (URL completa del video en tiktok.com)
+func (h *Handlers) GetTikTokFetch(w http.ResponseWriter, r *http.Request) {
+	rawURL := strings.TrimSpace(r.URL.Query().Get("url"))
+	if rawURL == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error":   "bad_request",
+			"message": "parámetro 'url' requerido (URL del video de TikTok)",
+		})
+		return
+	}
+	if h.TikTok == nil || !h.TikTok.Available() {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{
+			"error":   "ytdlp_unavailable",
+			"message": "yt-dlp no está instalado en el espejo. Instala con: pip install yt-dlp",
+		})
+		return
+	}
+	info, err := h.TikTok.FetchInfo(rawURL)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{
+			"error":   "fetch_failed",
+			"message": err.Error(),
+		})
+		return
+	}
+	atlas.Emit("TikTok video proxy solicitado", "low", "rauli-vision.tiktok", map[string]interface{}{
+		"video_id": info.ID,
+		"uploader": info.Uploader,
+	})
+	writeJSON(w, http.StatusOK, info)
+}
+
+// GetTikTokStream hace proxy del stream de video directamente al cliente.
+// Esto evita que el cliente (en Cuba) tenga que conectarse a CDNs de TikTok.
+// Query param: url (URL directa del stream, obtenida de /api/tiktok/fetch)
+func (h *Handlers) GetTikTokStream(w http.ResponseWriter, r *http.Request) {
+	streamURL := strings.TrimSpace(r.URL.Query().Get("url"))
+	if streamURL == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error":   "bad_request",
+			"message": "parámetro 'url' requerido (stream_url de /api/tiktok/fetch)",
+		})
+		return
+	}
+	if h.TikTok == nil {
+		http.Error(w, "servicio no disponible", http.StatusServiceUnavailable)
+		return
+	}
+	h.TikTok.ProxyStream(w, streamURL)
 }
 
 func clientIP(r *http.Request) string {

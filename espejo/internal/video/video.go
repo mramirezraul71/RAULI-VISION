@@ -659,6 +659,47 @@ func defaultChannels() []channel {
 			Priority:    12,
 			Tags:        []string{"cnn", "noticias", "videos"},
 		},
+		// ── TikTok — acceso para Cuba ──────────────────────────────────────────
+		// El sitio oficial de TikTok (tiktok.com) está geo-restringido en Cuba por
+		// sanciones OFAC. El espejo ofrece dos alternativas:
+		//   a) Canales YouTube con compilaciones TikTok (cuba_ready: true, disponibles ya)
+		//   b) Proxy yt-dlp via /api/tiktok/fetch + /api/tiktok/stream (requiere yt-dlp)
+		{
+			ID:          "tiktok_viral_es",
+			Title:       "TikTok Viral en Espanol",
+			Channel:     "Compilaciones TikTok",
+			Category:    "Entretenimiento",
+			Description: "Videos virales de TikTok en espanol (via YouTube). Accesible desde Cuba.",
+			URL:         "https://www.youtube.com/@tiktokviralenespanol",
+			FallbackURL: "https://www.youtube.com/results?search_query=tiktok+viral+espanol+2024",
+			CubaReady:   true,
+			Priority:    20,
+			Tags:        []string{"tiktok", "viral", "entretenimiento", "cuba"},
+		},
+		{
+			ID:          "tiktok_directo",
+			Title:       "TikTok (acceso directo)",
+			Channel:     "TikTok",
+			Category:    "Entretenimiento",
+			Description: "Sitio oficial TikTok. NOTA: restringido en Cuba — usa /api/tiktok/fetch?url=<video_url> para acceder via espejo.",
+			URL:         "https://www.tiktok.com/",
+			FallbackURL: "https://www.youtube.com/results?search_query=tiktok+viral",
+			CubaReady:   false,
+			Priority:    21,
+			Tags:        []string{"tiktok", "social", "video"},
+		},
+		{
+			ID:          "tiktok_musica_cuba",
+			Title:       "Musica y Baile Cuba - TikTok Style",
+			Channel:     "Musica Latina",
+			Category:    "Entretenimiento",
+			Description: "Musica, baile y cultura cubana al estilo TikTok, via YouTube.",
+			URL:         "https://www.youtube.com/results?search_query=musica+cubana+viral+2024",
+			FallbackURL: "https://www.youtube.com/@ReggaetonViralOficial",
+			CubaReady:   true,
+			Priority:    22,
+			Tags:        []string{"musica", "baile", "cuba", "tiktok", "viral"},
+		},
 	}
 
 	for i := range channels {

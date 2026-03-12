@@ -215,6 +215,46 @@ export async function chat(message: string, contextUrl?: string): Promise<{ repl
   return r.json()
 }
 
+// ── TikTok proxy API ─────────────────────────────────────────────────────────
+
+export type TikTokStatus = {
+  available: boolean
+  cuba_bypass: boolean
+  description: string
+  note: string
+}
+
+export type TikTokVideoInfo = {
+  id: string
+  title: string
+  uploader: string
+  duration_sec: number
+  thumbnail_url?: string
+  stream_url: string
+  original_url: string
+  source: string
+  cuba_ready: boolean
+}
+
+export async function tiktokStatus(): Promise<TikTokStatus> {
+  const r = await fetch(`${BASE}/api/tiktok/status`)
+  if (!r.ok) throw new Error('No se pudo verificar el estado del proxy TikTok')
+  return r.json()
+}
+
+export async function tiktokFetch(url: string): Promise<TikTokVideoInfo> {
+  const r = await fetch(`${BASE}/api/tiktok/fetch?url=${encodeURIComponent(url)}`)
+  if (!r.ok) {
+    const body = await r.json().catch(() => ({})) as { message?: string }
+    throw new Error(body.message || 'No se pudo obtener el video de TikTok')
+  }
+  return r.json()
+}
+
+export function tiktokStreamUrl(streamUrl: string): string {
+  return `${BASE}/api/tiktok/stream?url=${encodeURIComponent(streamUrl)}`
+}
+
 export async function chatHistory(): Promise<{ items: { id: string; role: string; preview: string; ts: string }[] }> {
   const r = await fetch(`${BASE}/api/chat/history`)
   if (!r.ok) throw new Error('Historial no disponible')

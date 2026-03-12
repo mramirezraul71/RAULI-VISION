@@ -12,9 +12,10 @@ import { VideoPage } from './pages/VideoPage'
 import { ChatPage } from './pages/ChatPage'
 import { CamiPage } from './pages/CamiPage'
 import { AccessPage } from './pages/AccessPage'
+import { TikTokPage } from './pages/TikTokPage'
 import { APP_VERSION, CHANGELOG } from './constants/version'
 
-type Tab = 'search' | 'video' | 'chat' | 'cami' | 'access'
+type Tab = 'search' | 'video' | 'tiktok' | 'chat' | 'cami' | 'access'
 
 export default function App() {
   const [tab, setTab] = useState<Tab>('search')
@@ -73,7 +74,7 @@ export default function App() {
                 {checkingUpdate ? 'Buscando…' : 'Buscar actualización'}
               </button>
               <nav className="flex gap-1">
-                {(['search', 'video', 'chat', 'cami', 'access'] as const).map((t) => (
+                {(['search', 'video', 'tiktok', 'chat', 'cami', 'access'] as const).map((t) => (
                   <button
                     key={t}
                     onClick={() => setTab(t)}
@@ -83,11 +84,13 @@ export default function App() {
                       ? 'Búsqueda'
                       : t === 'video'
                         ? 'Video'
-                        : t === 'chat'
-                          ? 'IA'
-                          : t === 'cami'
-                            ? 'CAMI'
-                            : 'Acceso'}
+                        : t === 'tiktok'
+                          ? '🎵 TikTok'
+                          : t === 'chat'
+                            ? 'IA'
+                            : t === 'cami'
+                              ? 'CAMI'
+                              : 'Acceso'}
                   </button>
                 ))}
               </nav>
@@ -100,6 +103,7 @@ export default function App() {
         <main className="max-w-4xl mx-auto px-4 py-6 flex-1 w-full">
           {tab === 'search' && <SearchPage />}
           {tab === 'video' && <VideoPage />}
+          {tab === 'tiktok' && <TikTokPage />}
           {tab === 'chat' && <ChatPage />}
           {tab === 'cami' && <CamiPage />}
           {tab === 'access' && <AccessPage />}

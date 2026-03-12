@@ -11,12 +11,14 @@ import (
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/feedback"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/middleware"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/search"
+	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/tiktok"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/video"
 )
 
 func Register(mux *http.ServeMux, version string, authSvc *auth.Service, searchSvc *search.Service, videoSvc *video.Service, chatSvc *chat.Service, accessSvc *access.Service, adminToken string, rl *middleware.RateLimiter) {
 	camiSvc := cami.New()
 	feedbackSvc := feedback.New()
+	tiktokSvc := tiktok.New()
 
 	h := &Handlers{
 		Auth:       authSvc,
@@ -26,6 +28,7 @@ func Register(mux *http.ServeMux, version string, authSvc *auth.Service, searchS
 		Cami:       camiSvc,
 		Feedback:   feedbackSvc,
 		Access:     accessSvc,
+		TikTok:     tiktokSvc,
 		Version:    version,
 		AdminToken: strings.TrimSpace(adminToken),
 	}
@@ -74,6 +77,14 @@ func Register(mux *http.ServeMux, version string, authSvc *auth.Service, searchS
 	// Feedback AI routes
 	mux.HandleFunc("POST /api/feedback/brain", chain(h.processFeedback))
 	mux.HandleFunc("GET /api/feedback/stats", chain(h.getFeedbackStats))
+
+	// TikTok proxy — acceso para regiones con restricción geopolítica (Cuba)
+	// GET /api/tiktok/status        → estado del proxy (yt-dlp disponible?)
+	// GET /api/tiktok/fetch?url=... → extrae info + stream_url de un video TikTok
+	// GET /api/tiktok/stream?url=.. → retransmite el stream directamente al cliente
+	mux.HandleFunc("GET /api/tiktok/status", chain(h.GetTikTokStatus))
+	mux.HandleFunc("GET /api/tiktok/fetch", chain(h.GetTikTokFetch))
+	mux.HandleFunc("GET /api/tiktok/stream", h.GetTikTokStream) // sin brotli: es stream binario
 }
 
 func (h *Handlers) getSearch(w http.ResponseWriter, r *http.Request)      { h.GetSearch(w, r) }
