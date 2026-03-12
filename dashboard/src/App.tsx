@@ -7,6 +7,7 @@ import { UpdateModal } from './components/UpdateModal'
 import { HomeButton } from './components/HomeButton'
 import { NetworkStatus } from './components/NetworkStatus'
 import { FeedbackAI } from './components/FeedbackAI'
+import { AtlasCompanion } from './components/AtlasCompanion'
 import { SearchPage } from './pages/SearchPage'
 import { VideoPage } from './pages/VideoPage'
 import { ChatPage } from './pages/ChatPage'
@@ -189,6 +190,7 @@ export default function App() {
         <NetworkStatus />
         <HomeButton />
         <FeedbackAI />
+        <AtlasCompanion />
       </div>
     </ErrorBoundary>
   )
