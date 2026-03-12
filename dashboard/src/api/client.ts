@@ -255,6 +255,76 @@ export function tiktokStreamUrl(streamUrl: string): string {
   return `${BASE}/api/tiktok/stream?url=${encodeURIComponent(streamUrl)}`
 }
 
+// ── CAMI Channel API ──────────────────────────────────────────────────────────
+
+export type CamiSong = {
+  id: string; title: string; artist: string; duration: string
+  uploadDate: string; fileSize: string; format: string
+  status: 'published' | 'draft' | 'processing'
+  plays: number; genre?: string; album?: string
+  explicit: boolean; trackNumber?: number; createdAt: string; updatedAt: string
+}
+export type CamiAlbum = {
+  id: string; title: string; artist: string; releaseDate: string
+  coverImage: string; songCount: number; status: 'published' | 'draft'
+  createdAt: string; updatedAt: string
+}
+export type CamiStats = {
+  totalSongs: number; totalAlbums: number; totalPlays: number
+  engagementRate: number; monthlyListeners: number
+}
+
+export async function camiGetSongs(): Promise<CamiSong[]> {
+  const r = await fetch(`${BASE}/api/cami/songs`)
+  if (!r.ok) throw new Error('No se pudieron cargar las canciones')
+  return r.json()
+}
+export async function camiGetAlbums(): Promise<CamiAlbum[]> {
+  const r = await fetch(`${BASE}/api/cami/albums`)
+  if (!r.ok) throw new Error('No se pudieron cargar los álbumes')
+  return r.json()
+}
+export async function camiGetStats(): Promise<CamiStats> {
+  const r = await fetch(`${BASE}/api/cami/stats`)
+  if (!r.ok) throw new Error('No se pudieron cargar las estadísticas')
+  return r.json()
+}
+export async function camiCreateSong(data: Partial<CamiSong>): Promise<CamiSong> {
+  const r = await fetch(`${BASE}/api/cami/songs`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
+  if (!r.ok) throw new Error(await parseError(r, 'No se pudo crear la canción'))
+  return r.json()
+}
+export async function camiUpdateSong(id: string, data: Partial<CamiSong>): Promise<CamiSong> {
+  const r = await fetch(`${BASE}/api/cami/songs/${encodeURIComponent(id)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
+  if (!r.ok) throw new Error(await parseError(r, 'No se pudo actualizar'))
+  return r.json()
+}
+export async function camiDeleteSong(id: string): Promise<void> {
+  const r = await fetch(`${BASE}/api/cami/songs/${encodeURIComponent(id)}`, { method: 'DELETE' })
+  if (!r.ok) throw new Error(await parseError(r, 'No se pudo eliminar'))
+}
+export async function camiPlaySong(id: string): Promise<void> {
+  await fetch(`${BASE}/api/cami/songs/${encodeURIComponent(id)}/play`, { method: 'POST' })
+}
+export async function camiCreateAlbum(data: Partial<CamiAlbum>): Promise<CamiAlbum> {
+  const r = await fetch(`${BASE}/api/cami/albums`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
+  if (!r.ok) throw new Error(await parseError(r, 'No se pudo crear el álbum'))
+  return r.json()
+}
+export async function camiUpload(file: File, meta: Partial<CamiSong>): Promise<CamiSong> {
+  const form = new FormData()
+  form.append('file', file)
+  Object.entries(meta).forEach(([k, v]) => { if (v !== undefined) form.append(k, String(v)) })
+  const r = await fetch(`${BASE}/api/cami/upload`, { method: 'POST', body: form })
+  if (!r.ok) throw new Error(await parseError(r, 'No se pudo subir el archivo'))
+  return r.json()
+}
+export async function camiSearch(q: string): Promise<CamiSong[]> {
+  const r = await fetch(`${BASE}/api/cami/search?q=${encodeURIComponent(q)}`)
+  if (!r.ok) throw new Error('Búsqueda fallida')
+  return r.json()
+}
+
 export async function chatHistory(): Promise<{ items: { id: string; role: string; preview: string; ts: string }[] }> {
   const r = await fetch(`${BASE}/api/chat/history`)
   if (!r.ok) throw new Error('Historial no disponible')
