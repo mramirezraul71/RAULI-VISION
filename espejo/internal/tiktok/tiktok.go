@@ -1,9 +1,14 @@
 // Package tiktok provee acceso a contenido de TikTok para usuarios en regiones
-// con restricciones geopolíticas (ej. Cuba). El espejo, al estar fuera de esas
-// regiones, puede obtener la URL de stream directa usando yt-dlp y retransmitirla.
+// con restricciones geopolíticas (ej. Cuba).
+//
+// Estrategia multicapa (sin yt-dlp):
+//   1. Cobalt API  — API pública open-source, soporta 20+ plataformas
+//   2. tikwm.com   — API REST dedicada a TikTok, capa gratuita
+//   3. yt-dlp      — fallback local si está instalado en el servidor
 package tiktok
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -16,36 +21,20 @@ import (
 	"time"
 )
 
-// VideoInfo contiene los metadatos del video extraídos por yt-dlp.
+// VideoInfo contiene los metadatos del video.
 type VideoInfo struct {
-	ID          string `json:"id"`
-	Title       string `json:"title"`
-	Uploader    string `json:"uploader"`
-	DurationSec int    `json:"duration_sec"`
+	ID           string `json:"id"`
+	Title        string `json:"title"`
+	Uploader     string `json:"uploader"`
+	DurationSec  int    `json:"duration_sec"`
 	ThumbnailURL string `json:"thumbnail_url,omitempty"`
-	StreamURL   string `json:"stream_url"`
-	OriginalURL string `json:"original_url"`
-	Source      string `json:"source"`
-	CubaReady   bool   `json:"cuba_ready"`
+	StreamURL    string `json:"stream_url"`
+	OriginalURL  string `json:"original_url"`
+	Source       string `json:"source"` // "cobalt" | "tikwm" | "ytdlp"
+	CubaReady    bool   `json:"cuba_ready"`
 }
 
-// ytdlpOutput es la estructura JSON que produce yt-dlp con -J.
-type ytdlpOutput struct {
-	ID          string  `json:"id"`
-	Title       string  `json:"title"`
-	Uploader    string  `json:"uploader"`
-	Duration    float64 `json:"duration"`
-	Thumbnail   string  `json:"thumbnail"`
-	URL         string  `json:"url"`
-	RequestedURL string  `json:"webpage_url"`
-	Formats     []struct {
-		URL    string `json:"url"`
-		Ext    string `json:"ext"`
-		Height int    `json:"height"`
-	} `json:"formats"`
-}
-
-// Service gestiona las peticiones de contenido TikTok.
+// Service gestiona las peticiones de contenido TikTok con estrategia multicapa.
 type Service struct {
 	mu        sync.Mutex
 	cache     map[string]cacheEntry
@@ -59,30 +48,26 @@ type cacheEntry struct {
 	expiresAt time.Time
 }
 
-// New crea un nuevo Service. Detecta automáticamente la ruta de yt-dlp.
+// New crea un nuevo Service.
 func New() *Service {
-	ytdlp := detectYtdlp()
 	return &Service{
 		cache:     make(map[string]cacheEntry),
 		cacheTTL:  10 * time.Minute,
-		ytdlpPath: ytdlp,
+		ytdlpPath: detectYtdlp(),
 		client:    &http.Client{Timeout: 20 * time.Second},
 	}
 }
 
-// Available indica si yt-dlp está instalado en el sistema.
+// Available siempre devuelve true: Cobalt y tikwm no requieren instalación local.
 func (s *Service) Available() bool {
-	return s.ytdlpPath != ""
+	return true
 }
 
 // FetchInfo extrae metadatos y URL de stream de un video de TikTok.
-// Devuelve error si yt-dlp no está disponible o la URL no es de TikTok.
+// Prueba Cobalt → tikwm → yt-dlp en ese orden.
 func (s *Service) FetchInfo(rawURL string) (VideoInfo, error) {
 	if err := validateTikTokURL(rawURL); err != nil {
 		return VideoInfo{}, err
-	}
-	if !s.Available() {
-		return VideoInfo{}, errors.New("yt-dlp no está instalado en el espejo; instala con: pip install yt-dlp")
 	}
 
 	// Revisar caché
@@ -93,20 +78,30 @@ func (s *Service) FetchInfo(rawURL string) (VideoInfo, error) {
 	}
 	s.mu.Unlock()
 
-	info, err := s.runYtdlp(rawURL)
-	if err != nil {
-		return VideoInfo{}, fmt.Errorf("yt-dlp error: %w", err)
+	// Capa 1: Cobalt API
+	if info, err := s.fetchViaCobalt(rawURL); err == nil {
+		s.setCache(rawURL, info)
+		return info, nil
 	}
 
-	s.mu.Lock()
-	s.cache[rawURL] = cacheEntry{info: info, expiresAt: time.Now().Add(s.cacheTTL)}
-	s.mu.Unlock()
+	// Capa 2: tikwm.com
+	if info, err := s.fetchViaTikwm(rawURL); err == nil {
+		s.setCache(rawURL, info)
+		return info, nil
+	}
 
-	return info, nil
+	// Capa 3: yt-dlp (si está instalado)
+	if s.ytdlpPath != "" {
+		if info, err := s.fetchViaYtdlp(rawURL); err == nil {
+			s.setCache(rawURL, info)
+			return info, nil
+		}
+	}
+
+	return VideoInfo{}, errors.New("no se pudo obtener el video por ninguna vía disponible (cobalt, tikwm, yt-dlp)")
 }
 
-// ProxyStream hace de proxy entre el cliente (en Cuba) y la URL directa del video.
-// Esto evita que el cliente tenga que conectarse a servidores de TikTok (bloqueados).
+// ProxyStream retransmite el video al cliente sin que éste contacte TikTok.
 func (s *Service) ProxyStream(w http.ResponseWriter, videoURL string) {
 	req, err := http.NewRequest(http.MethodGet, videoURL, nil)
 	if err != nil {
@@ -123,7 +118,6 @@ func (s *Service) ProxyStream(w http.ResponseWriter, videoURL string) {
 	}
 	defer resp.Body.Close()
 
-	// Propagar headers relevantes
 	for _, h := range []string{"Content-Type", "Content-Length", "Content-Range", "Accept-Ranges"} {
 		if v := resp.Header.Get(h); v != "" {
 			w.Header().Set(h, v)
@@ -134,18 +128,130 @@ func (s *Service) ProxyStream(w http.ResponseWriter, videoURL string) {
 	io.Copy(w, resp.Body)
 }
 
-func (s *Service) runYtdlp(rawURL string) (VideoInfo, error) {
-	// Extraer info en JSON sin descargar, preferir formato mp4/360p
+// ─── Capa 1: Cobalt API ───────────────────────────────────────────────────────
+// Cobalt es un proyecto open-source (github.com/imputnet/cobalt) con API pública.
+// Documentación: https://github.com/imputnet/cobalt/blob/main/docs/api.md
+
+type cobaltRequest struct {
+	URL string `json:"url"`
+}
+
+type cobaltResponse struct {
+	Status string `json:"status"` // "stream" | "redirect" | "picker" | "error"
+	URL    string `json:"url"`
+	Text   string `json:"text"`
+}
+
+func (s *Service) fetchViaCobalt(rawURL string) (VideoInfo, error) {
+	body, _ := json.Marshal(cobaltRequest{URL: rawURL})
+	req, err := http.NewRequest(http.MethodPost, "https://api.cobalt.tools/", bytes.NewReader(body))
+	if err != nil {
+		return VideoInfo{}, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return VideoInfo{}, fmt.Errorf("cobalt unreachable: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var cr cobaltResponse
+	if err := json.NewDecoder(resp.Body).Decode(&cr); err != nil {
+		return VideoInfo{}, fmt.Errorf("cobalt respuesta inválida: %w", err)
+	}
+	if (cr.Status != "stream" && cr.Status != "redirect") || cr.URL == "" {
+		return VideoInfo{}, fmt.Errorf("cobalt error: %s", cr.Text)
+	}
+
+	return VideoInfo{
+		StreamURL:   cr.URL,
+		OriginalURL: rawURL,
+		Source:      "cobalt",
+		CubaReady:   true,
+		Title:       "Video TikTok",
+	}, nil
+}
+
+// ─── Capa 2: tikwm.com API ────────────────────────────────────────────────────
+// API REST dedicada a TikTok. Capa gratuita sin auth.
+// https://www.tikwm.com/
+
+type tikwmResponse struct {
+	Code int    `json:"code"` // 0 = OK
+	Msg  string `json:"msg"`
+	Data struct {
+		ID       string `json:"id"`
+		Title    string `json:"title"`
+		Duration int    `json:"duration"`
+		Play     string `json:"play"`    // URL MP4 sin marca de agua
+		HdPlay   string `json:"hdplay"`  // URL HD
+		Cover    string `json:"cover"`   // thumbnail
+		Author   struct {
+			Nickname string `json:"nickname"`
+		} `json:"author"`
+	} `json:"data"`
+}
+
+func (s *Service) fetchViaTikwm(rawURL string) (VideoInfo, error) {
+	apiURL := "https://www.tikwm.com/api/?url=" + url.QueryEscape(rawURL) + "&hd=1"
+	resp, err := s.client.Get(apiURL)
+	if err != nil {
+		return VideoInfo{}, fmt.Errorf("tikwm unreachable: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var tr tikwmResponse
+	if err := json.NewDecoder(resp.Body).Decode(&tr); err != nil {
+		return VideoInfo{}, fmt.Errorf("tikwm respuesta inválida: %w", err)
+	}
+	if tr.Code != 0 || tr.Data.Play == "" {
+		return VideoInfo{}, fmt.Errorf("tikwm error: %s", tr.Msg)
+	}
+
+	streamURL := tr.Data.HdPlay
+	if streamURL == "" {
+		streamURL = tr.Data.Play
+	}
+
+	return VideoInfo{
+		ID:           tr.Data.ID,
+		Title:        tr.Data.Title,
+		Uploader:     tr.Data.Author.Nickname,
+		DurationSec:  tr.Data.Duration,
+		ThumbnailURL: tr.Data.Cover,
+		StreamURL:    streamURL,
+		OriginalURL:  rawURL,
+		Source:       "tikwm",
+		CubaReady:    true,
+	}, nil
+}
+
+// ─── Capa 3: yt-dlp (fallback local) ─────────────────────────────────────────
+
+type ytdlpOutput struct {
+	ID       string  `json:"id"`
+	Title    string  `json:"title"`
+	Uploader string  `json:"uploader"`
+	Duration float64 `json:"duration"`
+	Thumbnail string `json:"thumbnail"`
+	URL      string  `json:"url"`
+	Formats  []struct {
+		URL    string `json:"url"`
+		Ext    string `json:"ext"`
+		Height int    `json:"height"`
+	} `json:"formats"`
+}
+
+func (s *Service) fetchViaYtdlp(rawURL string) (VideoInfo, error) {
 	cmd := exec.Command(s.ytdlpPath,
-		"--no-playlist",
-		"--dump-json",
-		"--no-warnings",
+		"--no-playlist", "--dump-json", "--no-warnings",
 		"-f", "mp4[height<=480]/best[ext=mp4]/best",
 		rawURL,
 	)
 	out, err := cmd.Output()
 	if err != nil {
-		// Intentar sin restricción de formato
 		cmd2 := exec.Command(s.ytdlpPath, "--no-playlist", "--dump-json", "--no-warnings", rawURL)
 		out, err = cmd2.Output()
 		if err != nil {
@@ -159,15 +265,14 @@ func (s *Service) runYtdlp(rawURL string) (VideoInfo, error) {
 	}
 
 	streamURL := yt.URL
-	// Si no hay URL directa, buscar en formats el mejor mp4
-	if streamURL == "" && len(yt.Formats) > 0 {
+	if streamURL == "" {
 		for _, f := range yt.Formats {
 			if f.Ext == "mp4" && f.URL != "" {
 				streamURL = f.URL
 				break
 			}
 		}
-		if streamURL == "" {
+		if streamURL == "" && len(yt.Formats) > 0 {
 			streamURL = yt.Formats[len(yt.Formats)-1].URL
 		}
 	}
@@ -176,16 +281,19 @@ func (s *Service) runYtdlp(rawURL string) (VideoInfo, error) {
 	}
 
 	return VideoInfo{
-		ID:          yt.ID,
-		Title:       yt.Title,
-		Uploader:    yt.Uploader,
-		DurationSec: int(yt.Duration),
-		ThumbnailURL: yt.Thumbnail,
-		StreamURL:   streamURL,
-		OriginalURL: rawURL,
-		Source:      "tiktok",
-		CubaReady:   true,
+		ID: yt.ID, Title: yt.Title, Uploader: yt.Uploader,
+		DurationSec: int(yt.Duration), ThumbnailURL: yt.Thumbnail,
+		StreamURL: streamURL, OriginalURL: rawURL,
+		Source: "ytdlp", CubaReady: true,
 	}, nil
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+func (s *Service) setCache(key string, info VideoInfo) {
+	s.mu.Lock()
+	s.cache[key] = cacheEntry{info: info, expiresAt: time.Now().Add(s.cacheTTL)}
+	s.mu.Unlock()
 }
 
 func detectYtdlp() string {
@@ -207,8 +315,7 @@ func validateTikTokURL(rawURL string) error {
 		return errors.New("url inválida")
 	}
 	host := strings.ToLower(u.Hostname())
-	allowed := []string{"tiktok.com", "www.tiktok.com", "vm.tiktok.com", "vt.tiktok.com", "m.tiktok.com"}
-	for _, a := range allowed {
+	for _, a := range []string{"tiktok.com", "www.tiktok.com", "vm.tiktok.com", "vt.tiktok.com", "m.tiktok.com"} {
 		if host == a {
 			return nil
 		}
