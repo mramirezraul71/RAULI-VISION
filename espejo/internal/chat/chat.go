@@ -2,7 +2,9 @@ package chat
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"strconv"
@@ -35,6 +37,7 @@ type Service struct {
 	atlasBaseURL    string
 	rauliCloudURL   string
 	rauliCloudModel string
+	geminiAPIKey    string
 }
 
 func New() *Service {
@@ -52,6 +55,7 @@ func New() *Service {
 		atlasBaseURL:    strings.TrimRight(atlasURL, "/"),
 		rauliCloudURL:   strings.TrimRight(url, "/"),
 		rauliCloudModel: model,
+		geminiAPIKey:    strings.TrimSpace(os.Getenv("GEMINI_API_KEY")),
 	}
 }
 
@@ -136,6 +140,83 @@ func parseRuntimeInfo(provider string, offline bool) RuntimeInfo {
 		info.Offline = true
 	}
 	return info
+}
+
+const geminiSystemPrompt = `Eres el asistente inteligente de RAULI VISION, una plataforma de entretenimiento digital cubana que ofrece búsqueda de videos, música, contenido de TikTok y chat asistido.
+
+Tu rol es ayudar a los usuarios con preguntas sobre la plataforma, sobre los videos y contenidos que encuentran, sobre búsquedas, reproducción, y cualquier tema cultural o de entretenimiento. También puedes responder preguntas generales de cultura, historia, tecnología y actualidad.
+
+IMPORTANTE:
+- Responde siempre en español, de forma clara, amigable y concisa.
+- NO mezcles información de inventarios, panadería, cámaras de seguridad ni sistemas operacionales.
+- NO menciones "ATLAS", "panadería", "inventario" ni conceptos de sistemas industriales.
+- Si el usuario pregunta por un video o contenido, ayúdalo a buscarlo o a entender cómo usar la plataforma.
+- Si no sabes algo, dilo con honestidad y sugiere cómo el usuario podría encontrar la información.
+- Mantén un tono cálido y accesible, como un asistente cultural digital.`
+
+func (s *Service) callGemini(userMessage, contextURL string) (string, RuntimeInfo, error) {
+	if s.geminiAPIKey == "" {
+		return "", RuntimeInfo{}, nil
+	}
+	msg := userMessage
+	if contextURL != "" {
+		msg = "URL de contexto: " + contextURL + "\n\nPregunta: " + userMessage
+	}
+	reqBody := map[string]interface{}{
+		"system_instruction": map[string]interface{}{
+			"parts": []map[string]string{{"text": geminiSystemPrompt}},
+		},
+		"contents": []map[string]interface{}{
+			{"role": "user", "parts": []map[string]string{{"text": msg}}},
+		},
+		"generationConfig": map[string]interface{}{
+			"temperature":     0.7,
+			"maxOutputTokens": 1024,
+		},
+	}
+	bodyJSON, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", RuntimeInfo{}, err
+	}
+	apiURL := fmt.Sprintf(
+		"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=%s",
+		s.geminiAPIKey,
+	)
+	req, err := http.NewRequest("POST", apiURL, bytes.NewReader(bodyJSON))
+	if err != nil {
+		return "", RuntimeInfo{}, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", RuntimeInfo{}, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", RuntimeInfo{}, nil
+	}
+	var gemResp struct {
+		Candidates []struct {
+			Content struct {
+				Parts []struct {
+					Text string `json:"text"`
+				} `json:"parts"`
+			} `json:"content"`
+		} `json:"candidates"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&gemResp); err != nil {
+		return "", RuntimeInfo{}, err
+	}
+	if len(gemResp.Candidates) == 0 || len(gemResp.Candidates[0].Content.Parts) == 0 {
+		return "", RuntimeInfo{}, nil
+	}
+	text := strings.TrimSpace(gemResp.Candidates[0].Content.Parts[0].Text)
+	return text, RuntimeInfo{
+		Provider: "gemini",
+		Family:   "gemini",
+		Model:    "gemini-2.5-flash",
+	}, nil
 }
 
 func (s *Service) callAtlas(userMessage, contextURL string) (string, RuntimeInfo, error) {
@@ -237,14 +318,18 @@ func (s *Service) callRauliCloud(userMessage, contextURL string) (string, Runtim
 }
 
 func (s *Service) Chat(userMessage, contextURL string) (reply string, sources []string, runtime RuntimeInfo, err error) {
-	reply, runtime, err = s.callAtlas(userMessage, contextURL)
-	if err == nil && strings.TrimSpace(reply) != "" {
-		if contextURL != "" {
-			sources = []string{contextURL}
+	// 1. Gemini directo — contexto RAULI-VISION puro, sin contaminación operacional
+	if s.geminiAPIKey != "" {
+		reply, runtime, err = s.callGemini(userMessage, contextURL)
+		if err == nil && strings.TrimSpace(reply) != "" {
+			if contextURL != "" {
+				sources = []string{contextURL}
+			}
+			return reply, sources, runtime, nil
 		}
-		return reply, sources, runtime, nil
 	}
 
+	// 2. RAULI-Cloud (Ollama local)
 	if s.rauliCloudURL != "" {
 		reply, runtime, err = s.callRauliCloud(userMessage, contextURL)
 		if err == nil && strings.TrimSpace(reply) != "" {
@@ -253,6 +338,15 @@ func (s *Service) Chat(userMessage, contextURL string) (reply string, sources []
 			}
 			return reply, sources, runtime, nil
 		}
+	}
+
+	// 3. ATLAS comms hub (último recurso)
+	reply, runtime, err = s.callAtlas(userMessage, contextURL)
+	if err == nil && strings.TrimSpace(reply) != "" {
+		if contextURL != "" {
+			sources = []string{contextURL}
+		}
+		return reply, sources, runtime, nil
 	}
 
 	reply = "Estoy operando en modo local de RAULI-VISION. "

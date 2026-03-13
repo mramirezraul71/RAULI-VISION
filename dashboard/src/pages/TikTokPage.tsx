@@ -1,8 +1,8 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import {
   tiktokFetch, tiktokStatus, tiktokStreamUrl,
-  tiktokTrendingLive, tiktokSearch,
+  tiktokTrending, tiktokTrendingLive, tiktokSearch,
   type TikTokVideoInfo, type TikTokFeedItem,
 } from '../api/client'
 
@@ -168,11 +168,47 @@ function TrendingTab({ onPlay }: { onPlay: (item: TikTokFeedItem) => void }) {
   const [cachedAt, setCachedAt] = useState<string | null>(null)
   const [connected, setConnected] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const hasDataRef = useRef(false)
+  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // REST fallback: carga tendencias por HTTP cuando SSE falla o no llega a tiempo
+  const fetchViaRest = useCallback(async () => {
+    try {
+      const data = await tiktokTrending(20)
+      if (data.items.length > 0) {
+        const at = data.cached_at ?? new Date().toISOString()
+        setItems(prev => {
+          if (prev.length === 0) { setCachedAt(at); hasDataRef.current = true; return data.items }
+          setPending(data.items)
+          setCachedAt(at)
+          return prev
+        })
+        setConnected(true)
+        setError(null)
+      }
+    } catch { /* ignore — reintenta en siguiente ciclo */ }
+  }, [])
 
   useEffect(() => {
     setError(null)
+    hasDataRef.current = false
+
+    // Si SSE no entrega datos en 5 s (ej. Cloudflare bloquea SSE), fallback a REST
+    const fallbackTimeout = setTimeout(() => {
+      if (!hasDataRef.current) {
+        setError(null)
+        fetchViaRest()
+        // Actualización automática cada 5 minutos via REST
+        if (!pollTimerRef.current) {
+          pollTimerRef.current = setInterval(fetchViaRest, 5 * 60_000)
+        }
+      }
+    }, 5000)
+
     const es = tiktokTrendingLive(
       (newItems, at) => {
+        clearTimeout(fallbackTimeout)
+        hasDataRef.current = true
         setItems(newItems)
         setCachedAt(at)
         setConnected(true)
@@ -190,10 +226,21 @@ function TrendingTab({ onPlay }: { onPlay: (item: TikTokFeedItem) => void }) {
     )
     es.onerror = () => {
       setConnected(false)
-      setError('Conexión perdida con el servidor. Reconectando...')
+      if (!hasDataRef.current) {
+        clearTimeout(fallbackTimeout)
+        setError('Feed en tiempo real no disponible. Cargando en modo alternativo...')
+        fetchViaRest()
+        if (!pollTimerRef.current) {
+          pollTimerRef.current = setInterval(fetchViaRest, 5 * 60_000)
+        }
+      }
     }
-    return () => es.close()
-  }, [])
+    return () => {
+      clearTimeout(fallbackTimeout)
+      if (pollTimerRef.current) { clearInterval(pollTimerRef.current); pollTimerRef.current = null }
+      es.close()
+    }
+  }, [fetchViaRest])
 
   const applyPending = () => {
     setItems(pending)

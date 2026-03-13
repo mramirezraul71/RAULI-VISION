@@ -17,6 +17,7 @@ import (
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/feedback"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/search"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/tiktok"
+	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/tts"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/validate"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/video"
 )
@@ -30,6 +31,7 @@ type Handlers struct {
 	Feedback   *feedback.Service
 	Access     *access.Service
 	TikTok     *tiktok.Service
+	TTS        *tts.Service
 	Version    string
 	AdminToken string
 }
@@ -160,6 +162,29 @@ func (h *Handlers) HandleAccessRequestAction(w http.ResponseWriter, r *http.Requ
 	default:
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not_found", "message": "acción no disponible"})
 	}
+}
+
+// PostPresence — endpoint público (sin auth). El cliente lo llama cada 30s para
+// indicar que está activo. Solo actualiza un mapa en memoria, no escribe disco.
+func (h *Handlers) PostPresence(w http.ResponseWriter, r *http.Request) {
+	if h.Access == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "access_unavailable"})
+		return
+	}
+	code := strings.TrimPrefix(r.URL.Path, "/api/access/presence/")
+	code = strings.TrimSuffix(code, "/")
+	code = strings.TrimSpace(code)
+	if code == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "code_required"})
+		return
+	}
+	if !h.Access.Ping(code) {
+		// Código desconocido — responder 200 de todas formas para no filtrar info
+		writeJSON(w, http.StatusOK, map[string]string{"ok": "false"})
+		return
+	}
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	writeJSON(w, http.StatusOK, map[string]string{"ok": "true"})
 }
 
 func (h *Handlers) ListAccessUsers(w http.ResponseWriter, r *http.Request) {
@@ -541,8 +566,17 @@ func (h *Handlers) GetTikTokTrendingLive(w http.ResponseWriter, r *http.Request)
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("X-Accel-Buffering", "no") // deshabilita buffering en nginx/cloudflare
 
-	// Enviar caché actual inmediatamente
-	if items, cachedAt := h.TikTok.TrendingCached(); len(items) > 0 {
+	// Enviar caché actual inmediatamente.
+	// Si está vacío (espejo recién arrancó o todos los APIs fallaron), hacer fetch directo
+	// para que el cliente no quede colgado en "Conectando al feed en tiempo real...".
+	items, cachedAt := h.TikTok.TrendingCached()
+	if len(items) == 0 {
+		if fetched, _, _, err := h.TikTok.FetchTrending(20, ""); err == nil && len(fetched) > 0 {
+			items = fetched
+			cachedAt = time.Now()
+		}
+	}
+	if len(items) > 0 {
 		payload, _ := json.Marshal(map[string]interface{}{
 			"type":      "initial",
 			"items":     items,
@@ -670,4 +704,40 @@ func (h *Handlers) searchCami(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handlers) uploadCami(w http.ResponseWriter, r *http.Request) {
 	h.Cami.HandleUpload(w, r)
+}
+
+// PostTTS sintetiza texto a voz usando Gemini TTS y devuelve audio WAV al cliente.
+// Body JSON: {"text": "..."}
+// Respuesta: audio/wav — listo para reproducir directamente en el navegador.
+func (h *Handlers) PostTTS(w http.ResponseWriter, r *http.Request) {
+	if h.TTS == nil || !h.TTS.Available() {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{
+			"error":   "tts_unavailable",
+			"message": "Servicio TTS no disponible: configure GEMINI_API_KEY",
+		})
+		return
+	}
+	var body struct {
+		Text string `json:"text"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad_request", "message": "body JSON inválido"})
+		return
+	}
+	body.Text = strings.TrimSpace(body.Text)
+	if body.Text == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad_request", "message": "campo 'text' requerido"})
+		return
+	}
+	wav, err := h.TTS.Synthesize(body.Text)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "tts_error", "message": err.Error()})
+		return
+	}
+	w.Header().Set("Content-Type", "audio/wav")
+	w.Header().Set("Content-Length", fmt.Sprintf("%d", len(wav)))
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(wav)
 }

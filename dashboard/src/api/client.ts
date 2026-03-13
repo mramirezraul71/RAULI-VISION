@@ -1,5 +1,17 @@
 const BASE = ''
 
+/** Lee el token de usuario del localStorage para inyectar ?u= en las llamadas API */
+function userToken(): string {
+  try { return localStorage.getItem('rauli_user_token') ?? '' } catch { return '' }
+}
+
+/** Añade ?u=TOKEN a la URL para que espejo registre actividad real del usuario */
+function withUser(url: string): string {
+  const t = userToken()
+  if (!t) return url
+  return url + (url.includes('?') ? '&' : '?') + 'u=' + encodeURIComponent(t)
+}
+
 export type Health = {
   status?: string
   proxy?: string
@@ -40,6 +52,7 @@ export type AccessUser = {
   activated_at?: string
   disabled_at?: string
   approved_by?: string
+  last_seen?: string
 }
 
 export type AccessRequestInput = {
@@ -92,7 +105,7 @@ async function parseError(r: Response, fallback: string) {
 export async function search(q: string, max = 20): Promise<{ query: string; results: { title: string; url: string; snippet: string }[]; cached?: boolean }> {
   let r: Response
   try {
-    r = await fetch(`${BASE}/api/search?q=${encodeURIComponent(q)}&max=${max}`)
+    r = await fetch(withUser(`${BASE}/api/search?q=${encodeURIComponent(q)}&max=${max}`))
   } catch {
     throw new Error('No hay conexión con el servidor. Compruebe que el proxy y el espejo estén en marcha.')
   }
@@ -145,7 +158,7 @@ export type VideoChannelHealth = {
 }
 
 export async function videoSearch(q: string, max = 15): Promise<{ results: VideoSearchItem[]; cached?: boolean }> {
-  const r = await fetch(`${BASE}/api/video/search?q=${encodeURIComponent(q)}&max=${max}`)
+  const r = await fetch(withUser(`${BASE}/api/video/search?q=${encodeURIComponent(q)}&max=${max}`))
   if (!r.ok) throw new Error('Búsqueda de video fallida')
   return r.json()
 }
@@ -206,7 +219,7 @@ export type ChatRuntime = {
 }
 
 export async function chat(message: string, contextUrl?: string): Promise<{ reply: string; sources_used?: string[]; runtime?: ChatRuntime }> {
-  const r = await fetch(`${BASE}/api/chat`, {
+  const r = await fetch(withUser(`${BASE}/api/chat`), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ message, context_url: contextUrl || '' }),
@@ -237,7 +250,7 @@ export type TikTokFeedResponse = {
 }
 
 export async function tiktokTrending(count = 20, cursor = ''): Promise<TikTokFeedResponse & { cached_at?: string }> {
-  const r = await fetch(`${BASE}/api/tiktok/trending?count=${count}&cursor=${encodeURIComponent(cursor)}`)
+  const r = await fetch(withUser(`${BASE}/api/tiktok/trending?count=${count}&cursor=${encodeURIComponent(cursor)}`))
   if (!r.ok) throw new Error('No se pudieron cargar las tendencias de TikTok')
   return r.json()
 }
@@ -263,7 +276,7 @@ export function tiktokTrendingLive(
 }
 
 export async function tiktokSearch(q: string, count = 20, cursor = ''): Promise<TikTokFeedResponse & { query: string }> {
-  const r = await fetch(`${BASE}/api/tiktok/search?q=${encodeURIComponent(q)}&count=${count}&cursor=${encodeURIComponent(cursor)}`)
+  const r = await fetch(withUser(`${BASE}/api/tiktok/search?q=${encodeURIComponent(q)}&count=${count}&cursor=${encodeURIComponent(cursor)}`))
   if (!r.ok) throw new Error('Búsqueda de TikTok fallida')
   return r.json()
 }
@@ -431,6 +444,43 @@ export async function rejectAccessRequest(id: string, adminToken: string, input:
   })
   if (!r.ok) throw new Error(await parseError(r, 'No se pudo rechazar la solicitud.'))
   return r.json()
+}
+
+/** Heartbeat de presencia — llamar cada 30s desde AtlasCompanion */
+export async function pingPresence(accessCode: string): Promise<void> {
+  try {
+    await fetch(`${BASE}/api/access/presence/${encodeURIComponent(accessCode)}`, { method: 'POST' })
+  } catch { /* best-effort */ }
+}
+
+// ── TTS (Text-to-Speech) — Gemini 2.5 Flash Preview TTS ──────────────────────
+
+/**
+ * Sintetiza texto a audio WAV usando Gemini TTS del servidor (voz Aoede).
+ * Devuelve un Blob audio/wav listo para reproducir, o null si falla.
+ */
+export async function synthesizeSpeech(text: string): Promise<Blob | null> {
+  try {
+    const r = await fetch(`${BASE}/api/tts`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    })
+    if (!r.ok) return null
+    return await r.blob()
+  } catch {
+    return null
+  }
+}
+
+/** Lee la preferencia de voz desde localStorage. Por defecto: activada. */
+export function getVoiceEnabled(): boolean {
+  try { return localStorage.getItem('rauli_voice_enabled') !== 'false' } catch { return true }
+}
+
+/** Guarda la preferencia de voz en localStorage. */
+export function setVoiceEnabled(enabled: boolean): void {
+  try { localStorage.setItem('rauli_voice_enabled', enabled ? 'true' : 'false') } catch {}
 }
 
 export async function listAccessUsers(adminToken: string, status?: string): Promise<AccessListResponse<AccessUser>> {

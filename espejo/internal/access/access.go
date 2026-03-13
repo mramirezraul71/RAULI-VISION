@@ -54,6 +54,8 @@ type AccessUser struct {
 	ActivatedAt  *time.Time `json:"activated_at,omitempty"`
 	DisabledAt   *time.Time `json:"disabled_at,omitempty"`
 	ApprovedBy   string     `json:"approved_by,omitempty"`
+	// LastSeen es solo en memoria — no se persiste en disco
+	LastSeen     *time.Time `json:"last_seen,omitempty"`
 }
 
 type Store struct {
@@ -74,9 +76,10 @@ type RequestInput struct {
 }
 
 type Service struct {
-	mu    sync.RWMutex
-	path  string
-	store Store
+	mu       sync.RWMutex
+	path     string
+	store    Store
+	presence map[string]time.Time // access_code → last_seen (solo memoria)
 }
 
 func New(path string) (*Service, error) {
@@ -84,11 +87,28 @@ func New(path string) (*Service, error) {
 	if path == "" {
 		return nil, errors.New("ruta de almacenamiento de accesos vacía")
 	}
-	service := &Service{path: path}
+	service := &Service{path: path, presence: make(map[string]time.Time)}
 	if err := service.load(); err != nil {
 		return nil, err
 	}
 	return service, nil
+}
+
+// Ping registra que el usuario con este access_code está activo ahora mismo.
+func (s *Service) Ping(accessCode string) bool {
+	accessCode = strings.TrimSpace(strings.ToUpper(accessCode))
+	if accessCode == "" {
+		return false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, u := range s.store.Users {
+		if strings.EqualFold(u.AccessCode, accessCode) && u.Status == UserActive {
+			s.presence[accessCode] = time.Now().UTC()
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Service) CreateRequest(input RequestInput) (AccessRequest, error) {
@@ -172,6 +192,10 @@ func (s *Service) ListUsers(status string) []AccessUser {
 	for _, user := range s.store.Users {
 		if status != "" && strings.ToLower(user.Status) != status {
 			continue
+		}
+		if ts, ok := s.presence[strings.ToUpper(user.AccessCode)]; ok {
+			t := ts
+			user.LastSeen = &t
 		}
 		out = append(out, user)
 	}

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { chat, chatHistory } from '../api/client'
+import { chat, chatHistory, synthesizeSpeech, getVoiceEnabled, setVoiceEnabled } from '../api/client'
 
 function fixMojibake(value?: string | null) {
   const raw = String(value || '')
@@ -50,9 +50,41 @@ export function ChatPage() {
   const [contextUrl, setContextUrl] = useState('')
   const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set())
   const [expandedSources, setExpandedSources] = useState(false)
+  const [voiceEnabled, setVoiceEnabledState] = useState(() => getVoiceEnabled())
+  const [isSpeaking, setIsSpeaking] = useState(false)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const queryClient = useQueryClient()
+
+  const toggleVoice = useCallback(() => {
+    const next = !voiceEnabled
+    setVoiceEnabledState(next)
+    setVoiceEnabled(next)
+    if (!next && audioRef.current) {
+      audioRef.current.pause()
+      audioRef.current = null
+      setIsSpeaking(false)
+    }
+  }, [voiceEnabled])
+
+  const speakReply = useCallback(async (text: string) => {
+    if (!getVoiceEnabled()) return
+    // Detener cualquier reproducción anterior
+    if (audioRef.current) {
+      audioRef.current.pause()
+      audioRef.current = null
+    }
+    setIsSpeaking(true)
+    const blob = await synthesizeSpeech(text)
+    if (!blob || !getVoiceEnabled()) { setIsSpeaking(false); return }
+    const url = URL.createObjectURL(blob)
+    const audio = new Audio(url)
+    audioRef.current = audio
+    audio.onended = () => { setIsSpeaking(false); URL.revokeObjectURL(url) }
+    audio.onerror = () => { setIsSpeaking(false); URL.revokeObjectURL(url) }
+    audio.play().catch(() => setIsSpeaking(false))
+  }, [])
 
   const { data: history } = useQuery({
     queryKey: ['chatHistory'],
@@ -61,10 +93,14 @@ export function ChatPage() {
 
   const mutation = useMutation({
     mutationFn: () => chat(message, contextUrl || undefined),
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['chatHistory'] })
       setMessage('')
       setExpandedSources(false)
+      // Leer la respuesta con Gemini TTS automáticamente
+      if (data?.reply) {
+        speakReply(data.reply)
+      }
     },
   })
 
@@ -152,7 +188,32 @@ export function ChatPage() {
       </section>
 
       <section className="rounded-xl border border-[rgba(56,139,253,0.3)] bg-[rgba(22,27,34,0.85)] p-5 backdrop-blur max-h-[600px] overflow-y-auto">
-        <h3 className="text-accent font-semibold mb-3">Respuesta</h3>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-accent font-semibold">Respuesta</h3>
+          <button
+            type="button"
+            onClick={toggleVoice}
+            title={voiceEnabled ? 'Desactivar voz' : 'Activar voz'}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium border transition-all ${
+              voiceEnabled
+                ? 'border-[rgba(56,139,253,0.4)] bg-[rgba(56,139,253,0.12)] text-accent'
+                : 'border-white/10 bg-transparent text-muted'
+            }`}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+              {voiceEnabled ? (
+                <>
+                  <path d="M15.54 8.46a5 5 0 010 7.07"/>
+                  <path d="M19.07 4.93a10 10 0 010 14.14"/>
+                </>
+              ) : (
+                <line x1="23" y1="9" x2="17" y2="15"/>
+              )}
+            </svg>
+            {isSpeaking ? 'Reproduciendo...' : voiceEnabled ? 'Voz activa' : 'Voz desactivada'}
+          </button>
+        </div>
         {mutation.isPending && <p className="text-muted text-sm">Trayendo información del exterior, paciencia...</p>}
         {mutation.isError && <p className="text-red-400 text-sm">Error: {(mutation.error as Error).message}</p>}
         {mutation.data && (

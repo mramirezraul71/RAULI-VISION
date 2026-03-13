@@ -12,6 +12,7 @@ import (
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/chat"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/middleware"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/search"
+	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/tts"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/video"
 )
 
@@ -39,6 +40,7 @@ func main() {
 	searchSvc := search.New()
 	videoSvc := video.New()
 	chatSvc := chat.New()
+	ttsSvc := tts.New(os.Getenv("GEMINI_API_KEY"))
 	accessSvc, err := access.New(accessStore)
 	if err != nil {
 		log.Fatalf("No se pudo iniciar el almacén de accesos: %v", err)
@@ -47,7 +49,7 @@ func main() {
 	rl := middleware.NewRateLimiter(120, time.Minute) // 120 req/min por IP
 
 	mux := http.NewServeMux()
-	api.Register(mux, version, authSvc, searchSvc, videoSvc, chatSvc, accessSvc, adminToken, rl)
+	api.Register(mux, version, authSvc, searchSvc, videoSvc, chatSvc, accessSvc, adminToken, rl, ttsSvc)
 
 	addr := ":" + port
 	log.Printf("Espejo v%s escuchando en %s", version, addr)

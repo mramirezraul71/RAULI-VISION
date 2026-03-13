@@ -6,14 +6,29 @@ import {
   listAccessRequests,
   listAccessUsers,
   rejectAccessRequest,
-  updateAccessUserStatus,
   type AccessRequest,
   type AccessRequestInput,
   type AccessUser,
 } from '../api/client'
 
-const ADMIN_TOKEN_KEY = 'rauli_admin_token'
-const ADMIN_NAME_KEY = 'rauli_admin_name'
+const ADMIN_TOKEN_KEY  = 'rauli_admin_token'
+const ADMIN_NAME_KEY   = 'rauli_admin_name'
+const ATLAS_API        = 'http://127.0.0.1:8791'
+
+/** Registra el usuario aprobado en Atlas para activar el avatar personalizado via /?u=<access_code> */
+async function syncUserToAtlas(name: string, accessCode: string): Promise<void> {
+  try {
+    await fetch(`${ATLAS_API}/api/rauli/users`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, token: accessCode }),
+    })
+  } catch { /* best-effort */ }
+}
+
+function buildPersonalizedLink(accessCode: string): string {
+  return `${window.location.origin}/?u=${accessCode}`
+}
 
 const emptyRequest: AccessRequestInput = {
   name: '',
@@ -59,6 +74,12 @@ function userStatusStyle(status: AccessUser['status']) {
   return status === 'active'
     ? 'border-emerald-400/40 bg-emerald-500/10 text-emerald-300'
     : 'border-slate-400/40 bg-slate-500/10 text-slate-200'
+}
+
+/** Considera online si el último ping fue hace menos de 2 minutos */
+function isOnline(lastSeen?: string): boolean {
+  if (!lastSeen) return false
+  return Date.now() - new Date(lastSeen).getTime() < 2 * 60 * 1000
 }
 
 function CopyButton({ value, label = 'Copiar' }: { value: string; label?: string }) {
@@ -114,10 +135,19 @@ export function AccessPage() {
     enabled: adminReady,
   })
 
+  // Query separada para contadores — siempre trae todos sin filtro
+  const { data: allRequestsData } = useQuery({
+    queryKey: ['accessRequestsAll', adminToken],
+    queryFn: () => listAccessRequests(adminToken, undefined),
+    enabled: adminReady,
+    refetchInterval: adminReady ? 30_000 : false,
+  })
+
   const { data: usersData, isFetching: usersLoading, error: usersError, refetch: refetchUsers } = useQuery({
     queryKey: ['accessUsers', adminToken, userFilter],
     queryFn: () => listAccessUsers(adminToken, userFilter === 'all' ? undefined : userFilter),
     enabled: adminReady,
+    refetchInterval: adminReady ? 15_000 : false,
   })
 
   const approveMutation = useMutation({
@@ -125,6 +155,10 @@ export function AccessPage() {
       approveAccessRequest(id, adminToken, { note, decidedBy: adminName }),
     onSuccess: (data) => {
       setLastApproved(data.user)
+      // Sincronizar con Atlas para activar el avatar personalizado
+      if (data.user?.access_code && data.user?.name) {
+        syncUserToAtlas(data.user.name, data.user.access_code)
+      }
       queryClient.invalidateQueries({ queryKey: ['accessRequests'] })
       queryClient.invalidateQueries({ queryKey: ['accessUsers'] })
     },
@@ -139,21 +173,15 @@ export function AccessPage() {
     },
   })
 
-  const statusMutation = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: AccessUser['status'] }) =>
-      updateAccessUserStatus(id, status, adminToken, adminName),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['accessUsers'] }),
-  })
-
   const stats = useMemo(() => {
-    const items = requestData?.items ?? []
+    const items = allRequestsData?.items ?? []
     return {
       total: items.length,
       pending: items.filter((r) => r.status === 'pending').length,
       approved: items.filter((r) => r.status === 'approved').length,
       rejected: items.filter((r) => r.status === 'rejected').length,
     }
-  }, [requestData?.items])
+  }, [allRequestsData?.items])
 
   const handleSaveAdmin = () => {
     localStorage.setItem(ADMIN_TOKEN_KEY, adminToken.trim())
@@ -347,15 +375,38 @@ export function AccessPage() {
           </div>
 
           {lastApproved && (
-            <div className="mt-5 rounded-lg border border-emerald-400/40 bg-emerald-500/10 p-4 text-sm">
-              <p className="text-emerald-300 font-medium">Acceso aprobado</p>
-              <p className="text-muted mt-1">Usuario: {lastApproved.name} · {lastApproved.email}</p>
-              <div className="mt-2 flex flex-wrap items-center gap-2">
-                <span className="rounded-md border border-emerald-400/40 px-2 py-1 text-xs text-emerald-200 font-mono">
-                  {lastApproved.access_code}
-                </span>
-                <CopyButton value={lastApproved.access_code} label="Copiar código" />
+            <div className="mt-5 rounded-lg border border-emerald-400/40 bg-emerald-500/10 p-4 text-sm space-y-2">
+              <p className="text-emerald-300 font-semibold">✓ Acceso aprobado</p>
+              <p className="text-muted">
+                <span className="text-[#e6edf3] font-medium">{lastApproved.name}</span>
+                {lastApproved.email ? ` · ${lastApproved.email}` : ''}
+              </p>
+
+              {/* Enlace personalizado */}
+              <div>
+                <p className="text-[10px] text-emerald-200/60 uppercase tracking-widest mb-1">Enlace personalizado del avatar</p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="rounded-md border border-emerald-400/40 px-2 py-1 text-[11px] text-emerald-100 font-mono break-all">
+                    {buildPersonalizedLink(lastApproved.access_code)}
+                  </span>
+                  <CopyButton value={buildPersonalizedLink(lastApproved.access_code)} label="Copiar enlace" />
+                </div>
               </div>
+
+              {/* Código de acceso corto */}
+              <div>
+                <p className="text-[10px] text-emerald-200/60 uppercase tracking-widest mb-1">Código de acceso</p>
+                <div className="flex items-center gap-2">
+                  <span className="rounded-md border border-emerald-400/40 px-2 py-1 text-xs text-emerald-200 font-mono tracking-wider">
+                    {lastApproved.access_code}
+                  </span>
+                  <CopyButton value={lastApproved.access_code} label="Copiar" />
+                </div>
+              </div>
+
+              <p className="text-[10px] text-emerald-200/50 pt-1">
+                El avatar ATLAS saludará a {lastApproved.name} por su nombre al abrir el enlace.
+              </p>
             </div>
           )}
         </section>
@@ -542,10 +593,40 @@ export function AccessPage() {
       </section>
 
       <section className="rounded-xl border border-[rgba(56,139,253,0.3)] bg-[rgba(22,27,34,0.85)] p-5 backdrop-blur">
+        {/* Barra de presencia en tiempo real — solo visible para admin */}
+        {adminReady && (
+          <div className="mb-4 flex flex-wrap items-center gap-3">
+            {(() => {
+              const all = usersData?.items ?? []
+              const onlineNow = all.filter(u => isOnline(u.last_seen))
+              return (
+                <>
+                  <div className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-2">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.9)] animate-pulse flex-shrink-0" />
+                    <span className="text-sm font-semibold text-emerald-300">{onlineNow.length}</span>
+                    <span className="text-xs text-emerald-200/70">en línea ahora</span>
+                  </div>
+                  {onlineNow.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {onlineNow.map(u => (
+                        <span key={u.id} className="flex items-center gap-1.5 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-xs text-emerald-200">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                          {u.name}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <span className="ml-auto text-[10px] text-muted">auto-refresh 15s</span>
+                </>
+              )
+            })()}
+          </div>
+        )}
+
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h3 className="text-lg font-semibold text-accent">Usuarios activos</h3>
-            <p className="text-sm text-muted mt-1">Gestione activaciones y suspensiones.</p>
+            <p className="text-sm text-muted mt-1">Usuarios con acceso aprobado al sistema.</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <select
@@ -602,17 +683,30 @@ export function AccessPage() {
                   <th className="py-2 text-left">Usuario</th>
                   <th className="py-2 text-left">Rol</th>
                   <th className="py-2 text-left">Estado</th>
-                  <th className="py-2 text-left">Acceso</th>
+                  <th className="py-2 text-left">Enlace personalizado</th>
                   <th className="py-2 text-left">Alta</th>
-                  <th className="py-2 text-left">Acción</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[rgba(56,139,253,0.1)]">
                 {(usersData?.items ?? []).map((user) => (
                   <tr key={user.id}>
                     <td className="py-2">
-                      <div className="font-medium text-[#e6edf3]">{user.name}</div>
-                      <div className="text-xs text-muted">{user.email}</div>
+                      <div className="flex items-center gap-2">
+                        {isOnline(user.last_seen) ? (
+                          <span title="En línea ahora" className="flex-shrink-0 w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)] animate-pulse" />
+                        ) : (
+                          <span title="Sin actividad reciente" className="flex-shrink-0 w-2 h-2 rounded-full bg-slate-600" />
+                        )}
+                        <div className="font-medium text-[#e6edf3]">{user.name}</div>
+                      </div>
+                      <div className="text-xs text-muted pl-4">
+                        {user.email || '—'}
+                        {user.last_seen && (
+                          <span className="ml-2 text-emerald-400/70">
+                            · visto {relativeTime(user.last_seen)}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="py-2 text-muted">{user.role || '—'}</td>
                     <td className="py-2">
@@ -621,30 +715,15 @@ export function AccessPage() {
                       </span>
                     </td>
                     <td className="py-2">
-                      <div className="flex items-center gap-2">
-                        <span className="rounded-md border border-[rgba(56,139,253,0.3)] px-2 py-1 text-xs text-[#e6edf3] font-mono">
-                          {user.access_code}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="rounded-md border border-emerald-400/30 px-2 py-1 text-[10px] text-emerald-200 font-mono max-w-[140px] truncate" title={buildPersonalizedLink(user.access_code)}>
+                          /?u={user.access_code}
                         </span>
-                        <CopyButton value={user.access_code} />
+                        <CopyButton value={buildPersonalizedLink(user.access_code)} label="Copiar enlace" />
                       </div>
                     </td>
                     <td className="py-2 text-xs text-muted" title={formatDate(user.created_at)}>
                       {relativeTime(user.created_at)}
-                    </td>
-                    <td className="py-2">
-                      <button
-                        type="button"
-                        disabled={statusMutation.isPending}
-                        onClick={() =>
-                          statusMutation.mutate({
-                            id: user.id,
-                            status: user.status === 'active' ? 'disabled' : 'active',
-                          })
-                        }
-                        className="rounded-lg border border-[rgba(56,139,253,0.3)] px-3 py-1 text-xs text-muted hover:text-accent hover:border-accent/50 transition disabled:opacity-50"
-                      >
-                        {user.status === 'active' ? 'Desactivar' : 'Reactivar'}
-                      </button>
                     </td>
                   </tr>
                 ))}

@@ -138,9 +138,14 @@ export default function App() {
         </main>
 
         {/* ── Footer — solo desktop ───────────────────────────────────────── */}
-        <footer className="hidden md:block border-t border-[rgba(56,139,253,0.2)] py-3 text-center text-muted text-xs space-y-0.5">
+        <footer className="hidden md:block border-t border-[rgba(56,139,253,0.2)] py-4 text-center text-muted text-xs space-y-1">
           <div>RAULI-VISION · Protocolo negapro.t · Full Operations · Internet curado para entornos de bajo ancho de banda</div>
           <div>Dashboard v{APP_VERSION}{health?.version ? ` · API v${health.version}` : ''}</div>
+          <div className="flex items-center justify-center gap-2 pt-0.5 opacity-70">
+            <span>Desarrollado por <span className="text-accent font-medium">Ing. Raúl Martínez Ramírez</span></span>
+            <span className="text-[rgba(56,139,253,0.4)]">·</span>
+            <span>IA <span className="text-[#a8b3c0] font-medium">Gemini 2.5 Flash</span> · Asistente <span className="text-[#a8b3c0] font-medium">Claude Sonnet</span></span>
+          </div>
         </footer>
 
         {/* ── Bottom navigation bar — solo móvil ─────────────────────────── */}

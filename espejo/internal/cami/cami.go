@@ -75,89 +75,9 @@ func New() *Service {
 }
 
 func (s *Service) initializeSampleData() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	
-	// Sample songs
-	songs := []Song{
-		{
-			ID:         "1",
-			Title:      "Mi Primera Canción",
-			Artist:     "CAMI",
-			Duration:   "3:45",
-			UploadDate: "2024-01-15",
-			FileSize:   "8.2 MB",
-			Format:     "MP3",
-			Status:     "published",
-			Plays:      1250,
-			Genre:      stringPtr("Pop"),
-			Album:      stringPtr("Debut Album"),
-			Explicit:   false,
-			TrackNumber: intPtr(1),
-			ReleaseDate: stringPtr("2024-02-01"),
-			CreatedAt:  time.Now().AddDate(0, -1, 0),
-			UpdatedAt:  time.Now().AddDate(0, -1, 0),
-		},
-		{
-			ID:         "2",
-			Title:      "Noches de Luna",
-			Artist:     "CAMI",
-			Duration:   "4:12",
-			UploadDate: "2024-01-20",
-			FileSize:   "9.1 MB",
-			Format:     "MP3",
-			Status:     "published",
-			Plays:      890,
-			Genre:      stringPtr("Balada"),
-			Album:      stringPtr("Debut Album"),
-			Explicit:   false,
-			TrackNumber: intPtr(2),
-			ReleaseDate: stringPtr("2024-02-01"),
-			CreatedAt:  time.Now().AddDate(0, -1, 0),
-			UpdatedAt:  time.Now().AddDate(0, -1, 0),
-		},
-		{
-			ID:         "3",
-			Title:      "Demo Nueva",
-			Artist:     "CAMI",
-			Duration:   "3:20",
-			UploadDate: "2024-01-25",
-			FileSize:   "7.5 MB",
-			Format:     "WAV",
-			Status:     "draft",
-			Plays:      0,
-			Genre:      stringPtr("Pop"),
-			Album:      nil,
-			Explicit:   false,
-			TrackNumber: nil,
-			ReleaseDate: nil,
-			CreatedAt:  time.Now().AddDate(0, -1, 0),
-			UpdatedAt:  time.Now().AddDate(0, -1, 0),
-		},
-	}
-	
-	for _, song := range songs {
-		s.songs[song.ID] = song
-	}
-	
-	// Sample albums
-	albums := []Album{
-		{
-			ID:          "1",
-			Title:       "Debut Album",
-			Artist:      "CAMI",
-			ReleaseDate: "2024-02-01",
-			CoverImage:  "/api/placeholder/300/300",
-			SongCount:   12,
-			Status:      "published",
-			CreatedAt:   time.Now().AddDate(0, -1, 0),
-			UpdatedAt:   time.Now().AddDate(0, -1, 0),
-		},
-	}
-	
-	for _, album := range albums {
-		s.albums[album.ID] = album
-	}
+	// No se inicializan datos de muestra — los datos de muestra tienen AudioPath vacío
+	// y el stream devolvería 404. CAMI arranca vacío; las canciones reales se suben
+	// desde la pestaña "Subir" en el dashboard.
 }
 
 func stringPtr(s string) *string {

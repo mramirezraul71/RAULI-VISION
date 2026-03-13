@@ -12,10 +12,11 @@ import (
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/middleware"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/search"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/tiktok"
+	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/tts"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/video"
 )
 
-func Register(mux *http.ServeMux, version string, authSvc *auth.Service, searchSvc *search.Service, videoSvc *video.Service, chatSvc *chat.Service, accessSvc *access.Service, adminToken string, rl *middleware.RateLimiter) {
+func Register(mux *http.ServeMux, version string, authSvc *auth.Service, searchSvc *search.Service, videoSvc *video.Service, chatSvc *chat.Service, accessSvc *access.Service, adminToken string, rl *middleware.RateLimiter, ttsSvc *tts.Service) {
 	camiSvc := cami.New()
 	feedbackSvc := feedback.New()
 	tiktokSvc := tiktok.New()
@@ -29,6 +30,7 @@ func Register(mux *http.ServeMux, version string, authSvc *auth.Service, searchS
 		Feedback:   feedbackSvc,
 		Access:     accessSvc,
 		TikTok:     tiktokSvc,
+		TTS:        ttsSvc,
 		Version:    version,
 		AdminToken: strings.TrimSpace(adminToken),
 	}
@@ -41,7 +43,7 @@ func Register(mux *http.ServeMux, version string, authSvc *auth.Service, searchS
 		return f
 	}
 	chain := func(f http.HandlerFunc) http.HandlerFunc {
-		return rateWrap(logWrap(wrap(optionalAuth(authSvc, f))))
+		return rateWrap(logWrap(wrap(optionalAuth(authSvc, accessSvc, f))))
 	}
 
 	mux.HandleFunc("POST /auth/token", rateWrap(logWrap(h.PostAuthToken)))
@@ -51,6 +53,7 @@ func Register(mux *http.ServeMux, version string, authSvc *auth.Service, searchS
 	mux.HandleFunc("POST /api/access/requests/", rateWrap(logWrap(wrap(h.HandleAccessRequestAction))))
 	mux.HandleFunc("GET /api/access/users", rateWrap(logWrap(wrap(h.ListAccessUsers))))
 	mux.HandleFunc("PUT /api/access/users/", rateWrap(logWrap(wrap(h.HandleAccessUserAction))))
+	mux.HandleFunc("POST /api/access/presence/", rateWrap(logWrap(h.PostPresence))) // sin auth, solo heartbeat
 	mux.HandleFunc("GET /api/search", chain(h.getSearch))
 	mux.HandleFunc("GET /api/video/search", chain(h.getVideoSearch))
 	mux.HandleFunc("GET /api/video/channels/health", chain(h.getVideoChannelsHealth))
@@ -89,6 +92,10 @@ func Register(mux *http.ServeMux, version string, authSvc *auth.Service, searchS
 	mux.HandleFunc("GET /api/tiktok/search", chain(h.GetTikTokSearch))
 	mux.HandleFunc("GET /api/tiktok/fetch", chain(h.GetTikTokFetch))
 	mux.HandleFunc("GET /api/tiktok/stream", h.GetTikTokStream) // sin brotli: es stream binario
+
+	// TTS (Text-to-Speech) — Gemini 2.5 Flash Preview TTS, voz Aoede
+	// POST /api/tts  body: {"text":"..."} → audio/wav
+	mux.HandleFunc("POST /api/tts", rateWrap(logWrap(wrap(h.PostTTS))))
 }
 
 func (h *Handlers) getSearch(w http.ResponseWriter, r *http.Request)      { h.GetSearch(w, r) }
@@ -138,11 +145,25 @@ func (h *Handlers) serveVideoPost(w http.ResponseWriter, r *http.Request) {
 	h.PostVideoRequest(w, r)
 }
 
-func optionalAuth(authSvc *auth.Service, next http.HandlerFunc) http.HandlerFunc {
+// optionalAuth valida el token JWT si está presente y, si es válido, registra
+// actividad de presencia en tiempo real usando el client_id (= access_code).
+// optionalAuth detecta la identidad del usuario por dos vías y registra
+// actividad real de presencia cada vez que hace una llamada API:
+//  1. JWT Bearer token (client_id == access_code)
+//  2. Query param ?u=ACCESS_CODE (para clientes sin JWT)
+func optionalAuth(authSvc *auth.Service, accessSvc *access.Service, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		authH := r.Header.Get("Authorization")
-		if authH != "" && strings.HasPrefix(authH, "Bearer ") {
-			_, _ = authSvc.ValidateToken(strings.TrimPrefix(authH, "Bearer "))
+		if accessSvc != nil {
+			// Vía 1: JWT Bearer
+			if authH := r.Header.Get("Authorization"); authH != "" && strings.HasPrefix(authH, "Bearer ") {
+				if clientID, err := authSvc.ValidateToken(strings.TrimPrefix(authH, "Bearer ")); err == nil && clientID != "" {
+					accessSvc.Ping(clientID)
+				}
+			}
+			// Vía 2: ?u=ACCESS_CODE (sin autenticación, más simple para el frontend)
+			if u := strings.TrimSpace(r.URL.Query().Get("u")); u != "" {
+				accessSvc.Ping(u)
+			}
 		}
 		next(w, r)
 	}

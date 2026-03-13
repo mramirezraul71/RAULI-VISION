@@ -59,6 +59,10 @@ func (p *Proxy) serveStatic(w http.ResponseWriter, r *http.Request) {
 		if file, err := p.static.Open("/index.html"); err == nil {
 			defer file.Close()
 			if data, err := io.ReadAll(file); err == nil {
+				// No cachear index.html: referencia JS/CSS con hash que cambia en cada build
+				w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+				w.Header().Set("Pragma", "no-cache")
+				w.Header().Set("Expires", "0")
 				w.Header().Set("Content-Type", "text/html; charset=utf-8")
 				w.WriteHeader(http.StatusOK)
 				w.Write(data)
@@ -72,6 +76,19 @@ func (p *Proxy) serveStatic(w http.ResponseWriter, r *http.Request) {
 	}
 	_, err := p.static.Open(r.URL.Path)
 	if err != nil {
+		// SPA fallback: rutas del frontend que no son archivos → index.html
+		if file, err2 := p.static.Open("/index.html"); err2 == nil {
+			defer file.Close()
+			if data, err2 := io.ReadAll(file); err2 == nil {
+				w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+				w.Header().Set("Pragma", "no-cache")
+				w.Header().Set("Expires", "0")
+				w.Header().Set("Content-Type", "text/html; charset=utf-8")
+				w.WriteHeader(http.StatusOK)
+				w.Write(data)
+				return
+			}
+		}
 		http.NotFound(w, r)
 		return
 	}

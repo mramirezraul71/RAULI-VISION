@@ -111,8 +111,21 @@ func (s *Service) trendRefreshLoop() {
 }
 
 func (s *Service) doTrendRefresh() {
-	items, _, _, err := s.FetchTrending(20, "")
-	if err != nil || len(items) == 0 {
+	var items []FeedItem
+	var err error
+	// Hasta 3 intentos con backoff: 0s, 10s, 30s
+	delays := []time.Duration{0, 10 * time.Second, 30 * time.Second}
+	for i, d := range delays {
+		if d > 0 {
+			time.Sleep(d)
+		}
+		items, _, _, err = s.FetchTrending(20, "")
+		if err == nil && len(items) > 0 {
+			break
+		}
+		_ = i // intento fallido, continuar
+	}
+	if len(items) == 0 {
 		return
 	}
 	s.trendMu.Lock()
