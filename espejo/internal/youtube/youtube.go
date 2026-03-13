@@ -205,7 +205,7 @@ func (s *Service) FetchStream(videoID string) (StreamInfo, error) {
 }
 
 func (s *Service) fetchViaCobalt(videoID string) (StreamInfo, error) {
-	body := fmt.Sprintf(`{"url":"https://www.youtube.com/watch?v=%s","isAudioOnly":false,"vQuality":"360"}`, videoID)
+	body := fmt.Sprintf(`{"url":"https://www.youtube.com/watch?v=%s","videoQuality":"360"}`, videoID)
 	req, _ := http.NewRequest(http.MethodPost, "https://api.cobalt.tools/", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
@@ -227,10 +227,17 @@ func (s *Service) fetchViaCobalt(videoID string) (StreamInfo, error) {
 	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
 		return StreamInfo{}, err
 	}
-	if raw.URL == "" || raw.Status == "error" {
-		return StreamInfo{}, fmt.Errorf("cobalt: no stream URL")
+	// Cobalt valid statuses: "tunnel", "stream", "redirect" (URL populated)
+	// "picker" = multiple options (no single URL), "error" = failure
+	switch raw.Status {
+	case "tunnel", "stream", "redirect":
+		if raw.URL == "" {
+			return StreamInfo{}, fmt.Errorf("cobalt: status %s pero URL vacía", raw.Status)
+		}
+		return StreamInfo{ID: videoID, StreamURL: raw.URL, Source: "cobalt"}, nil
+	default:
+		return StreamInfo{}, fmt.Errorf("cobalt: status no utilizable: %s", raw.Status)
 	}
-	return StreamInfo{ID: videoID, StreamURL: raw.URL, Source: "cobalt"}, nil
 }
 
 func (s *Service) fetchViaInvidious(instance, videoID string) (StreamInfo, error) {
@@ -251,12 +258,17 @@ func (s *Service) fetchViaInvidious(instance, videoID string) (StreamInfo, error
 			Type    string `json:"type"`
 			Quality string `json:"quality"` // "medium", "small", "tiny"
 		} `json:"formatStreams"`
+		AdaptiveFormats []struct {
+			URL     string `json:"url"`
+			Type    string `json:"type"`
+			Quality string `json:"quality"`
+		} `json:"adaptiveFormats"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
 		return StreamInfo{}, err
 	}
 
-	// Preferir calidad baja (ahorra ancho de banda)
+	// Preferir calidad baja en formatStreams (streams multiplexados — audio+video)
 	for _, q := range []string{"small", "medium", "tiny"} {
 		for _, f := range raw.FormatStreams {
 			if strings.Contains(f.Type, "video/mp4") && f.Quality == q && f.URL != "" {
@@ -268,10 +280,24 @@ func (s *Service) fetchViaInvidious(instance, videoID string) (StreamInfo, error
 			}
 		}
 	}
-	// Fallback: cualquier MP4
+	// Fallback: cualquier MP4 en formatStreams
 	for _, f := range raw.FormatStreams {
 		if strings.Contains(f.Type, "video/mp4") && f.URL != "" {
-			return StreamInfo{ID: videoID, StreamURL: f.URL, Source: "invidious"}, nil
+			streamURL := f.URL
+			if strings.HasPrefix(streamURL, "/") {
+				streamURL = instance + streamURL
+			}
+			return StreamInfo{ID: videoID, StreamURL: streamURL, Source: "invidious"}, nil
+		}
+	}
+	// Fallback: adaptiveFormats (solo video, sin audio — mejor que nada)
+	for _, f := range raw.AdaptiveFormats {
+		if strings.Contains(f.Type, "video/mp4") && f.URL != "" {
+			streamURL := f.URL
+			if strings.HasPrefix(streamURL, "/") {
+				streamURL = instance + streamURL
+			}
+			return StreamInfo{ID: videoID, StreamURL: streamURL, Source: "invidious"}, nil
 		}
 	}
 	return StreamInfo{}, fmt.Errorf("no se encontró formato MP4 para %s en %s", videoID, instance)
