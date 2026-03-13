@@ -3,9 +3,12 @@ package video
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -26,6 +29,8 @@ type VideoMeta struct {
 	Description string   `json:"description,omitempty"`
 	WatchURL    string   `json:"watch_url,omitempty"`
 	CubaURL     string   `json:"cuba_url,omitempty"`
+	HLSProxyURL string   `json:"hls_proxy_url,omitempty"` // Proxy HLS endpoint para player embebido
+	HasHLS      bool     `json:"has_hls"`                  // true si tiene stream m3u8 directo
 }
 
 type SearchItem struct {
@@ -69,6 +74,7 @@ type channel struct {
 	Description string   `json:"description,omitempty"`
 	URL         string   `json:"url"`
 	FallbackURL string   `json:"fallback_url,omitempty"`
+	StreamM3U8  string   `json:"stream_m3u8,omitempty"` // URL directa m3u8/HLS
 	LogoURL     string   `json:"logo_url,omitempty"`
 	Tags        []string `json:"tags,omitempty"`
 	CubaReady   bool     `json:"cuba_ready"`
@@ -152,7 +158,7 @@ func (s *Service) Meta(id string) (VideoMeta, bool) {
 	if !ok {
 		return VideoMeta{}, false
 	}
-	return VideoMeta{
+	meta := VideoMeta{
 		ID:          ch.ID,
 		Title:       ch.Title,
 		Channel:     ch.Channel,
@@ -163,7 +169,12 @@ func (s *Service) Meta(id string) (VideoMeta, bool) {
 		Description: ch.Description,
 		WatchURL:    "/api/video/" + url.PathEscape(ch.ID) + "/stream",
 		CubaURL:     "/api/video/" + url.PathEscape(ch.ID) + "/stream?mode=cuba",
-	}, true
+	}
+	if ch.StreamM3U8 != "" {
+		meta.HLSProxyURL = "/api/video/hls?url=" + url.QueryEscape(ch.StreamM3U8)
+		meta.HasHLS = true
+	}
+	return meta, true
 }
 
 func (s *Service) Request(id, quality string) (jobID string, status string, err error) {
@@ -530,6 +541,7 @@ func defaultChannels() []channel {
 			Description: "Canal de noticias 24/7 de RTVE en espanol.",
 			URL:         "https://www.rtve.es/play/videos/directo/canales-lineales/24h/",
 			FallbackURL: "https://www.youtube.com/@24horasrtve/live",
+			StreamM3U8:  "https://rtvelivestream.akamaized.net/rtvesec/canal24h/canal24h_main_576.m3u8",
 			CubaReady:   true,
 			Priority:    1,
 			Tags:        []string{"noticias", "espana", "directo", "24h"},
@@ -541,6 +553,7 @@ func defaultChannels() []channel {
 			Category:    "General Internacional",
 			Description: "Senal internacional oficial de TVE.",
 			URL:         "https://www.rtve.es/play/videos/directo/canales-lineales/tve-internacional/",
+			StreamM3U8:  "https://rtvelivestream.akamaized.net/rtvesec/tvi/tvi_main_576.m3u8",
 			CubaReady:   true,
 			Priority:    2,
 			Tags:        []string{"rtve", "internacional", "espana"},
@@ -552,6 +565,7 @@ func defaultChannels() []channel {
 			Category:    "Noticias Cuba",
 			Description: "Canal cubano de actualidad y cobertura en vivo.",
 			URL:         "https://www.canalcaribe.icrt.cu/senal-en-vivo/",
+			StreamM3U8:  "https://videoencm.nauta.cu/ICRTLive/caribe/index.m3u8",
 			CubaReady:   true,
 			Priority:    3,
 			Tags:        []string{"cuba", "noticias", "caribe"},
@@ -563,6 +577,7 @@ func defaultChannels() []channel {
 			Category:    "General Cuba",
 			Description: "Senal internacional de Cubavision.",
 			URL:         "https://www.cubavision.icrt.cu/senal-en-vivo/",
+			StreamM3U8:  "https://videoencm.nauta.cu/ICRTLive/cubavision/index.m3u8",
 			CubaReady:   true,
 			Priority:    4,
 			Tags:        []string{"cuba", "internacional", "tv"},
@@ -575,6 +590,7 @@ func defaultChannels() []channel {
 			Description: "Canal latinoamericano de noticias en vivo.",
 			URL:         "https://www.telesurtv.net/en-vivo/",
 			FallbackURL: "https://www.youtube.com/@teleSURtv/live",
+			StreamM3U8:  "https://live.telesurtv.net/hls/telesur-espanol/index.m3u8",
 			CubaReady:   true,
 			Priority:    5,
 			Tags:        []string{"latam", "noticias", "politica"},
@@ -587,6 +603,7 @@ func defaultChannels() []channel {
 			Description: "Cobertura internacional en espanol.",
 			URL:         "https://www.dw.com/es/tv/directo/s-100825",
 			FallbackURL: "https://www.youtube.com/@dwespanol/live",
+			StreamM3U8:  "https://dwamdstream102.akamaized.net/hls/live/2015529/dwstream102/index.m3u8",
 			CubaReady:   true,
 			Priority:    6,
 			Tags:        []string{"internacional", "alemania", "noticias"},
@@ -599,6 +616,7 @@ func defaultChannels() []channel {
 			Description: "Noticias internacionales 24 horas en espanol.",
 			URL:         "https://www.france24.com/es/en-vivo",
 			FallbackURL: "https://www.youtube.com/@FRANCE24Espanol/live",
+			StreamM3U8:  "https://stream.france24.com/hls/live/2037861/F24_ES_HI_HLS/master.m3u8",
 			CubaReady:   true,
 			Priority:    7,
 			Tags:        []string{"francia", "noticias", "mundo"},
@@ -611,6 +629,7 @@ func defaultChannels() []channel {
 			Description: "Senal de noticias europeas en espanol.",
 			URL:         "https://es.euronews.com/live",
 			FallbackURL: "https://www.youtube.com/@euronewsespanol/live",
+			StreamM3U8:  "https://euronews-euronews-es-live.samsung.wurl.tv/playlist.m3u8",
 			CubaReady:   true,
 			Priority:    8,
 			Tags:        []string{"europa", "noticias", "en vivo"},
@@ -706,4 +725,164 @@ func defaultChannels() []channel {
 		channels[i] = normalizeChannel(channels[i], i+1)
 	}
 	return channels
+}
+
+// reAttrURI captura URI="..." dentro de etiquetas EXT-X-* del formato m3u8.
+var reAttrURI = regexp.MustCompile(`(?i)(URI=")([^"]+)(")`)
+
+// resolveHLSURL resuelve una URL relativa de HLS respecto a la base.
+func resolveHLSURL(base *url.URL, ref string) string {
+	if strings.HasPrefix(ref, "http://") || strings.HasPrefix(ref, "https://") {
+		return ref
+	}
+	u, err := base.Parse(ref)
+	if err != nil {
+		return ref
+	}
+	return u.String()
+}
+
+// rewriteM3U8 descarga el m3u8 en targetURL y reescribe todas las URIs (segmentos y
+// sub-playlists) para que pasen por /api/video/hls?url=<encoded>.
+func (s *Service) rewriteM3U8(targetURL string) ([]byte, error) {
+	req, err := http.NewRequest(http.MethodGet, targetURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; RauliVision/1.0)")
+	req.Header.Set("Accept", "*/*")
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("upstream respondió HTTP %d", resp.StatusCode)
+	}
+
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, 2<<20)) // 2MB max
+	if err != nil {
+		return nil, err
+	}
+
+	base, err := url.Parse(targetURL)
+	if err != nil {
+		return nil, err
+	}
+
+	lines := strings.Split(string(raw), "\n")
+	for i, line := range lines {
+		trimmed := strings.TrimRight(line, "\r")
+		// Reescribir URI="..." dentro de etiquetas EXT-X-*
+		if strings.HasPrefix(trimmed, "#EXT") && strings.Contains(trimmed, "URI=") {
+			lines[i] = reAttrURI.ReplaceAllStringFunc(trimmed, func(m string) string {
+				parts := reAttrURI.FindStringSubmatch(m)
+				if len(parts) < 4 {
+					return m
+				}
+				abs := resolveHLSURL(base, parts[2])
+				return parts[1] + "/api/video/hls?url=" + url.QueryEscape(abs) + parts[3]
+			})
+			continue
+		}
+		// Reescribir líneas URI (segmentos o sub-playlists): no empieza con # y no está vacía
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		abs := resolveHLSURL(base, trimmed)
+		lines[i] = "/api/video/hls?url=" + url.QueryEscape(abs)
+	}
+	return []byte(strings.Join(lines, "\n")), nil
+}
+
+// ProxyHLS sirve una URL de HLS (m3u8 o segmento TS) a través del espejo.
+// Si el contenido es un m3u8, reescribe todas las URIs internas para que también
+// pasen por este proxy. Si es un segmento binario (TS/AAC/MP4), lo transmite tal cual.
+func (s *Service) ProxyHLS(w http.ResponseWriter, targetURL string) {
+	// Validación mínima de URL
+	u, err := url.ParseRequestURI(targetURL)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
+		http.Error(w, "URL inválida", http.StatusBadRequest)
+		return
+	}
+
+	// Determinar si es un m3u8 por extensión o query
+	isM3U8 := strings.Contains(strings.ToLower(u.Path), ".m3u8") ||
+		strings.Contains(strings.ToLower(u.RawQuery), ".m3u8")
+
+	if isM3U8 {
+		body, err := s.rewriteM3U8(targetURL)
+		if err != nil {
+			http.Error(w, "error obteniendo m3u8: "+err.Error(), http.StatusBadGateway)
+			return
+		}
+		w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Cache-Control", "no-cache, no-store")
+		w.WriteHeader(http.StatusOK)
+		w.Write(body) //nolint:errcheck
+		return
+	}
+
+	// Segmento binario: proxy directo
+	req, err := http.NewRequest(http.MethodGet, targetURL, nil)
+	if err != nil {
+		http.Error(w, "URL inválida", http.StatusBadRequest)
+		return
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; RauliVision/1.0)")
+	resp, err := s.client.Do(req)
+	if err != nil {
+		http.Error(w, "error conectando al stream", http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+
+	// Si la respuesta es m3u8 (el servidor lo dice por Content-Type aunque la URL no lo indique)
+	ct := resp.Header.Get("Content-Type")
+	if strings.Contains(ct, "mpegurl") || strings.Contains(ct, "x-mpegurl") {
+		raw, err := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
+		if err != nil {
+			http.Error(w, "error leyendo m3u8", http.StatusBadGateway)
+			return
+		}
+		base, _ := url.Parse(targetURL)
+		lines := strings.Split(string(raw), "\n")
+		for i, line := range lines {
+			trimmed := strings.TrimRight(line, "\r")
+			if strings.HasPrefix(trimmed, "#EXT") && strings.Contains(trimmed, "URI=") {
+				lines[i] = reAttrURI.ReplaceAllStringFunc(trimmed, func(m string) string {
+					parts := reAttrURI.FindStringSubmatch(m)
+					if len(parts) < 4 {
+						return m
+					}
+					abs := resolveHLSURL(base, parts[2])
+					return parts[1] + "/api/video/hls?url=" + url.QueryEscape(abs) + parts[3]
+				})
+				continue
+			}
+			if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+				continue
+			}
+			abs := resolveHLSURL(base, trimmed)
+			lines[i] = "/api/video/hls?url=" + url.QueryEscape(abs)
+		}
+		w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Cache-Control", "no-cache, no-store")
+		w.Write([]byte(strings.Join(lines, "\n"))) //nolint:errcheck
+		return
+	}
+
+	// Binario normal (TS, AAC, fMP4, etc.)
+	for _, h := range []string{"Content-Type", "Content-Length", "Accept-Ranges", "Content-Range"} {
+		if v := resp.Header.Get(h); v != "" {
+			w.Header().Set(h, v)
+		}
+	}
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Cache-Control", "public, max-age=10")
+	w.WriteHeader(resp.StatusCode)
+	io.Copy(w, resp.Body) //nolint:errcheck
 }

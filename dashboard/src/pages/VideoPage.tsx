@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import Hls from 'hls.js'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { videoChannelsHealth, videoMeta, videoSearch } from '../api/client'
 
@@ -26,18 +27,113 @@ function Skeleton() {
   )
 }
 
-function formatDuration(sec: number) {
-  const m = Math.floor(sec / 60)
-  const s = sec % 60
-  return `${m}:${s.toString().padStart(2, '0')}`
-}
-
 function formatTimestamp(iso?: string) {
   if (!iso) return null
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return iso
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 }
+
+// ── HLS Player embebido ──────────────────────────────────────────────────────
+function HLSPlayer({ src, title }: { src: string; title: string }) {
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const hlsRef = useRef<Hls | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (!videoRef.current || !src) return
+    setError(null)
+    setLoading(true)
+
+    // Destruir instancia previa
+    if (hlsRef.current) {
+      hlsRef.current.destroy()
+      hlsRef.current = null
+    }
+
+    const video = videoRef.current
+
+    if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      // Safari — soporte HLS nativo
+      video.src = src
+      video.play().catch(() => {/* autoplay puede bloquearse */})
+      setLoading(false)
+    } else if (Hls.isSupported()) {
+      const hls = new Hls({
+        enableWorker: true,
+        lowLatencyMode: false,
+        maxBufferLength: 30,
+        maxMaxBufferLength: 60,
+        startLevel: -1, // auto quality
+      })
+      hlsRef.current = hls
+      hls.loadSource(src)
+      hls.attachMedia(video)
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        setLoading(false)
+        video.play().catch(() => {/* autoplay puede bloquearse */})
+      })
+      hls.on(Hls.Events.ERROR, (_evt, data) => {
+        if (data.fatal) {
+          setLoading(false)
+          if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+            setError('No se pudo conectar al stream. El canal puede estar fuera del aire o restringido desde esta región.')
+          } else {
+            setError(`Error de reproducción: ${data.details}`)
+          }
+        }
+      })
+    } else {
+      setError('Tu navegador no soporta HLS. Usa Chrome, Firefox o Safari.')
+      setLoading(false)
+    }
+
+    return () => {
+      if (hlsRef.current) {
+        hlsRef.current.destroy()
+        hlsRef.current = null
+      }
+    }
+  }, [src])
+
+  return (
+    <div className="relative w-full aspect-video bg-black rounded-xl overflow-hidden border border-[rgba(56,139,253,0.3)]">
+      {loading && !error && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/80 z-10">
+          <span className="h-8 w-8 rounded-full border-2 border-accent border-t-transparent animate-spin" />
+          <span className="text-muted text-xs">Conectando al stream en vivo…</span>
+        </div>
+      )}
+      {error && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/90 p-4 z-10">
+          <span className="text-3xl">📡</span>
+          <p className="text-red-400 text-sm text-center max-w-xs">{error}</p>
+          <button
+            onClick={() => { setError(null); setLoading(true) }}
+            className="mt-1 px-3 py-1.5 text-xs rounded-lg border border-accent/40 text-accent hover:bg-accent/10 transition"
+          >
+            Reintentar
+          </button>
+        </div>
+      )}
+      <video
+        ref={videoRef}
+        title={title}
+        controls
+        className="w-full h-full"
+        playsInline
+      />
+      {/* Indicador LIVE */}
+      <div className="absolute top-2 left-2 bg-red-600/90 text-white text-xs font-bold px-2 py-0.5 rounded-full flex items-center gap-1 pointer-events-none">
+        <span className="h-1.5 w-1.5 rounded-full bg-white animate-pulse" />
+        EN VIVO
+      </div>
+    </div>
+  )
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 
 export function VideoPage() {
   const queryClient = useQueryClient()
@@ -70,7 +166,7 @@ export function VideoPage() {
     },
   })
 
-  // Auto-refresh: poll health every 60s when enabled
+  // Auto-refresh: poll health every 60s cuando está activado
   useEffect(() => {
     if (autoRefresh) {
       healthMutation.mutate()
@@ -112,7 +208,6 @@ export function VideoPage() {
       const isInternacional = catLower.includes('internacional')
       if (scope === 'cuba' && !isCuba) continue
       if (scope === 'internacional' && !isInternacional) continue
-      // Cuba Mode filter: only show cuba_ready channels
       if (cubaMode && !item.cuba_ready) continue
       const existing = groups.get(category)
       if (existing) {
@@ -134,17 +229,77 @@ export function VideoPage() {
   const handleVerTodo = () => {
     setQ('')
     setQuery('')
-    // Explicitly invalidate and refetch to ensure fresh results
     queryClient.invalidateQueries({ queryKey: ['videoSearch', ''] })
     refetchList()
   }
 
   return (
     <div className="space-y-6">
+      {/* ── Player embebido — aparece cuando el canal tiene HLS ── */}
+      {selectedId && meta?.has_hls && meta?.hls_proxy_url && (
+        <section className="rounded-xl overflow-hidden border border-[rgba(56,139,253,0.3)] bg-[rgba(22,27,34,0.85)]">
+          <div className="px-4 py-2 border-b border-[rgba(56,139,253,0.2)] flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="font-semibold text-[#e6edf3] truncate">{meta.title}</span>
+              <span className="text-muted text-xs">· {meta.channel}</span>
+            </div>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <a
+                href={meta.cuba_url || `/api/video/${encodeURIComponent(selectedId)}/stream?mode=cuba`}
+                target="_blank"
+                rel="noreferrer"
+                className="text-xs px-2 py-1 rounded border border-[rgba(56,139,253,0.3)] text-muted hover:text-accent transition"
+                title="Abrir en nueva pestaña"
+              >
+                ↗ Nueva pestaña
+              </a>
+            </div>
+          </div>
+          <HLSPlayer
+            key={meta.hls_proxy_url}
+            src={meta.hls_proxy_url}
+            title={meta.title}
+          />
+          <p className="px-4 py-2 text-xs text-muted/60">
+            Stream en vivo via proxy espejo · Si no carga, el canal puede estar fuera del aire
+          </p>
+        </section>
+      )}
+
+      {/* ── Sin HLS: mostrar botones de enlace ── */}
+      {selectedId && meta && !meta.has_hls && (
+        <section className="rounded-xl border border-[rgba(56,139,253,0.3)] bg-[rgba(22,27,34,0.85)] p-5">
+          <h3 className="text-accent font-semibold mb-1">{meta.title}</h3>
+          <p className="text-muted text-sm mb-3">
+            {meta.description || selectedChannel?.description || 'Canal de TV en vivo'} · Este canal no tiene stream HLS disponible. Se abrirá en el sitio web oficial.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <a
+              href={meta.cuba_url || `/api/video/${encodeURIComponent(selectedId)}/stream?mode=cuba`}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-lg bg-accent/20 text-accent px-4 py-2 font-medium hover:bg-accent/30 transition"
+            >
+              Abrir canal (modo Cuba)
+            </a>
+            <a
+              href={meta.watch_url || `/api/video/${encodeURIComponent(selectedId)}/stream`}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-lg border border-[rgba(56,139,253,0.4)] px-4 py-2 text-sm text-muted hover:text-accent hover:border-accent/50"
+            >
+              Abrir canal (directo)
+            </a>
+          </div>
+        </section>
+      )}
+
+      {/* ── Búsqueda y filtros ── */}
       <section className="rounded-xl border border-[rgba(56,139,253,0.3)] bg-[rgba(22,27,34,0.85)] p-5 backdrop-blur">
-        <h2 className="text-accent font-semibold mb-3">TV en vivo (espanol)</h2>
-        <p className="text-muted text-sm mb-4">
-          Catalogo curado de canales en espanol. Si esta en Cuba, use siempre el boton <strong>modo Cuba</strong> para abrir por la ruta optimizada.
+        <h2 className="text-accent font-semibold mb-1">TV en vivo · Canales en español</h2>
+        <p className="text-muted text-xs mb-4">
+          Los canales marcados <span className="text-green-300">con stream HLS</span> se reproducen directamente en la app.
+          Los demás abren el sitio web oficial.
         </p>
         <form
           onSubmit={(e) => {
@@ -173,6 +328,7 @@ export function VideoPage() {
         </form>
       </section>
 
+      {/* ── Lista de canales ── */}
       <section className="rounded-xl border border-[rgba(56,139,253,0.3)] bg-[rgba(22,27,34,0.85)] p-5 backdrop-blur">
         <div className="mb-4 flex flex-wrap items-center gap-2">
           <button
@@ -208,8 +364,6 @@ export function VideoPage() {
           >
             Solo Internacional
           </button>
-
-          {/* Cuba Mode toggle */}
           <button
             type="button"
             onClick={() => setCubaMode((v) => !v)}
@@ -240,19 +394,19 @@ export function VideoPage() {
                     <li
                       key={v.id}
                       className={`rounded-lg border p-3 cursor-pointer transition ${selectedId === v.id ? 'border-accent bg-accent/10' : 'border-[rgba(56,139,253,0.2)] hover:border-accent/50'}`}
-                      onClick={() => {
-                        setSelectedId(v.id)
-                      }}
+                      onClick={() => setSelectedId(v.id)}
                     >
                       <span className="font-medium block truncate">{v.title}</span>
-                      <span className="text-muted text-sm">
-                        {v.channel}
-                        {v.duration_sec > 0 ? ` · ${formatDuration(v.duration_sec)}` : ' · En vivo'}
-                      </span>
-                      <div className="mt-2 flex items-center gap-2 text-xs">
+                      <span className="text-muted text-sm">{v.channel} · En vivo</span>
+                      <div className="mt-1.5 flex items-center gap-2 text-xs flex-wrap">
                         <span className={`rounded-full px-2 py-0.5 ${v.cuba_ready ? 'bg-green-500/15 text-green-300' : 'bg-yellow-500/15 text-yellow-300'}`}>
-                          {v.cuba_ready ? 'Listo para Cuba' : 'Verificar ruta'}
+                          {v.cuba_ready ? 'Cuba OK' : 'Verificar ruta'}
                         </span>
+                        {selectedId === v.id && meta?.has_hls && (
+                          <span className="rounded-full px-2 py-0.5 bg-blue-500/15 text-blue-300">
+                            ▶ Stream HLS
+                          </span>
+                        )}
                       </div>
                     </li>
                   ))}
@@ -266,52 +420,22 @@ export function VideoPage() {
         )}
         {!listLoading && list && list.results.length > 0 && groupedChannels.length === 0 && (
           <p className="text-sm text-muted">
-            No hay canales en este alcance. {cubaMode && 'Desactive Cuba Mode o '}Cambie a <strong>Todo</strong> o use otro filtro.
+            No hay canales en este alcance. {cubaMode && 'Desactive Cuba Mode o '}Cambie a <strong>Todo</strong>.
           </p>
         )}
       </section>
 
-      {selectedId && meta && (
-        <section className="rounded-xl border border-[rgba(56,139,253,0.3)] bg-[rgba(22,27,34,0.85)] p-5 backdrop-blur">
-          <h3 className="text-accent font-semibold mb-2">{meta.title}</h3>
-          <p className="text-muted text-sm mb-3">
-            {meta.description || selectedChannel?.description || 'Canal de TV en vivo'} · Calidades sugeridas: {meta.qualities.join(', ')}
-          </p>
-          <div className="flex flex-wrap gap-2">
-            <a
-              href={meta.cuba_url || `/api/video/${encodeURIComponent(selectedId)}/stream?mode=cuba`}
-              target="_blank"
-              rel="noreferrer"
-              className="rounded-lg bg-accent/20 text-accent px-4 py-2 font-medium hover:bg-accent/30 transition"
-            >
-              Abrir canal (modo Cuba)
-            </a>
-            <a
-              href={meta.watch_url || `/api/video/${encodeURIComponent(selectedId)}/stream`}
-              target="_blank"
-              rel="noreferrer"
-              className="rounded-lg border border-[rgba(56,139,253,0.4)] px-4 py-2 text-sm text-muted hover:text-accent hover:border-accent/50"
-            >
-              Abrir canal (directo)
-            </a>
-          </div>
-          <p className="mt-2 text-xs text-muted">Si un canal no abre en directo, pruebe primero el modo Cuba.</p>
-        </section>
-      )}
-
+      {/* ── Chequeo de canales ── */}
       <section className="rounded-xl border border-[rgba(56,139,253,0.3)] bg-[rgba(22,27,34,0.85)] p-5 backdrop-blur">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h3 className="text-accent font-semibold">Chequeo profesional de canales</h3>
-            <p className="text-muted text-sm">Verifica disponibilidad desde el servidor usando la misma ruta de la app.</p>
+            <h3 className="text-accent font-semibold">Chequeo de canales</h3>
+            <p className="text-muted text-sm">Verifica disponibilidad desde el servidor.</p>
             {lastHealthCheck && (
-              <p className="text-xs text-muted mt-1">
-                Ultimo chequeo: {formatTimestamp(lastHealthCheck)}
-              </p>
+              <p className="text-xs text-muted mt-1">Ultimo chequeo: {formatTimestamp(lastHealthCheck)}</p>
             )}
           </div>
           <div className="flex flex-wrap gap-2">
-            {/* Auto-refresh toggle */}
             <button
               type="button"
               onClick={() => setAutoRefresh((v) => !v)}
@@ -320,7 +444,6 @@ export function VideoPage() {
                   ? 'border-green-400/50 bg-green-500/15 text-green-300 hover:bg-green-500/25'
                   : 'border-[rgba(56,139,253,0.3)] text-muted hover:text-accent hover:border-accent/50'
               }`}
-              title="Refresco automático cada 60 segundos"
             >
               {autoRefresh ? 'Auto-refresh: ON' : 'Auto-refresh'}
             </button>

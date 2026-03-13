@@ -134,6 +134,10 @@ func Register(mux *http.ServeMux, version string, authSvc *auth.Service, searchS
 	mux.HandleFunc("GET /api/youtube/search", chain(h.GetYouTubeSearch))
 	mux.HandleFunc("GET /api/youtube/stream", chain(h.GetYouTubeStream))
 	mux.HandleFunc("GET /api/youtube/proxy", h.GetYouTubeProxy) // stream binario — sin brotli
+
+	// ── HLS proxy — proxifica m3u8 + segmentos para TV en vivo ────────────────
+	// GET /api/video/hls?url=<encoded> → proxy HLS transparente (reescribe URIs internas)
+	mux.HandleFunc("GET /api/video/hls", h.GetVideoHLSProxy) // sin brotli: binario/m3u8
 }
 
 func (h *Handlers) getSearch(w http.ResponseWriter, r *http.Request)      { h.GetSearch(w, r) }

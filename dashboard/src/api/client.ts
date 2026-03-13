@@ -174,6 +174,8 @@ export async function videoMeta(id: string): Promise<{
   description?: string
   watch_url?: string
   cuba_url?: string
+  hls_proxy_url?: string
+  has_hls?: boolean
 }> {
   const r = await fetch(`${BASE}/api/video/${encodeURIComponent(id)}`)
   if (!r.ok) throw new Error('Video no encontrado')

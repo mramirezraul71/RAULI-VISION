@@ -351,6 +351,18 @@ func (h *Handlers) GetVideoStream(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, target, http.StatusTemporaryRedirect)
 }
 
+// GetVideoHLSProxy proxies HLS content (m3u8 playlists and TS/media segments)
+// through the espejo server, rewriting internal m3u8 URIs to pass through here too.
+// GET /api/video/hls?url=<encoded_target_url>
+func (h *Handlers) GetVideoHLSProxy(w http.ResponseWriter, r *http.Request) {
+	targetURL := strings.TrimSpace(r.URL.Query().Get("url"))
+	if targetURL == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad_request", "message": "url requerida"})
+		return
+	}
+	h.Video.ProxyHLS(w, targetURL)
+}
+
 func (h *Handlers) GetVideoStatus(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimPrefix(r.URL.Path, "/api/video/")
 	id = strings.TrimSuffix(id, "/status")
