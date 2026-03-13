@@ -17,16 +17,6 @@ const CATEGORY_STYLE: Record<string, string> = {
   'General Internacional': 'border-[rgba(168,85,247,0.35)] bg-[rgba(168,85,247,0.12)] text-violet-300',
 }
 
-function Skeleton() {
-  return (
-    <div className="animate-pulse grid gap-3 sm:grid-cols-2">
-      {[1, 2, 3, 4].map((i) => (
-        <div key={i} className="h-24 rounded-lg bg-[rgba(48,54,61,0.4)]" />
-      ))}
-    </div>
-  )
-}
-
 function formatTimestamp(iso?: string) {
   if (!iso) return null
   const d = new Date(iso)
@@ -35,7 +25,7 @@ function formatTimestamp(iso?: string) {
 }
 
 // ── HLS Player embebido ──────────────────────────────────────────────────────
-function HLSPlayer({ src, title }: { src: string; title: string }) {
+function HLSPlayer({ src, title, fallbackUrl }: { src: string; title: string; fallbackUrl?: string }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const hlsRef = useRef<Hls | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -46,7 +36,6 @@ function HLSPlayer({ src, title }: { src: string; title: string }) {
     setError(null)
     setLoading(true)
 
-    // Destruir instancia previa
     if (hlsRef.current) {
       hlsRef.current.destroy()
       hlsRef.current = null
@@ -55,33 +44,25 @@ function HLSPlayer({ src, title }: { src: string; title: string }) {
     const video = videoRef.current
 
     if (video.canPlayType('application/vnd.apple.mpegurl')) {
-      // Safari — soporte HLS nativo
+      // Safari — HLS nativo
       video.src = src
-      video.play().catch(() => {/* autoplay puede bloquearse */})
+      video.play().catch(() => {})
       setLoading(false)
     } else if (Hls.isSupported()) {
-      const hls = new Hls({
-        enableWorker: true,
-        lowLatencyMode: false,
-        maxBufferLength: 30,
-        maxMaxBufferLength: 60,
-        startLevel: -1, // auto quality
-      })
+      const hls = new Hls({ enableWorker: true, lowLatencyMode: false, startLevel: -1 })
       hlsRef.current = hls
       hls.loadSource(src)
       hls.attachMedia(video)
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
         setLoading(false)
-        video.play().catch(() => {/* autoplay puede bloquearse */})
+        video.play().catch(() => {})
       })
       hls.on(Hls.Events.ERROR, (_evt, data) => {
         if (data.fatal) {
           setLoading(false)
-          if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
-            setError('No se pudo conectar al stream. El canal puede estar fuera del aire o restringido desde esta región.')
-          } else {
-            setError(`Error de reproducción: ${data.details}`)
-          }
+          setError(data.type === Hls.ErrorTypes.NETWORK_ERROR
+            ? 'No se pudo conectar al stream. El canal puede estar fuera del aire.'
+            : `Error de reproducción: ${data.details}`)
         }
       })
     } else {
@@ -89,46 +70,49 @@ function HLSPlayer({ src, title }: { src: string; title: string }) {
       setLoading(false)
     }
 
-    return () => {
-      if (hlsRef.current) {
-        hlsRef.current.destroy()
-        hlsRef.current = null
-      }
-    }
+    return () => { hlsRef.current?.destroy(); hlsRef.current = null }
   }, [src])
 
   return (
-    <div className="relative w-full aspect-video bg-black rounded-xl overflow-hidden border border-[rgba(56,139,253,0.3)]">
+    <div className="relative w-full aspect-video bg-black rounded-xl overflow-hidden">
       {loading && !error && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/80 z-10">
-          <span className="h-8 w-8 rounded-full border-2 border-accent border-t-transparent animate-spin" />
-          <span className="text-muted text-xs">Conectando al stream en vivo…</span>
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black z-10">
+          <span className="h-10 w-10 rounded-full border-2 border-accent border-t-transparent animate-spin" />
+          <span className="text-muted text-sm mt-1">Conectando al canal en vivo…</span>
         </div>
       )}
       {error && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/90 p-4 z-10">
-          <span className="text-3xl">📡</span>
-          <p className="text-red-400 text-sm text-center max-w-xs">{error}</p>
-          <button
-            onClick={() => { setError(null); setLoading(true) }}
-            className="mt-1 px-3 py-1.5 text-xs rounded-lg border border-accent/40 text-accent hover:bg-accent/10 transition"
-          >
-            Reintentar
-          </button>
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[#0d1117] p-6 z-10">
+          <span className="text-4xl">📡</span>
+          <p className="text-muted text-sm text-center max-w-xs">{error}</p>
+          <div className="flex gap-2 flex-wrap justify-center mt-1">
+            <button
+              onClick={() => { setError(null); setLoading(true) }}
+              className="px-3 py-1.5 text-xs rounded-lg border border-accent/40 text-accent hover:bg-accent/10 transition"
+            >
+              Reintentar
+            </button>
+            {fallbackUrl && (
+              <a
+                href={fallbackUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="px-3 py-1.5 text-xs rounded-lg border border-[rgba(56,139,253,0.4)] text-muted hover:text-accent transition"
+              >
+                Abrir en sitio web
+              </a>
+            )}
+          </div>
         </div>
       )}
-      <video
-        ref={videoRef}
-        title={title}
-        controls
-        className="w-full h-full"
-        playsInline
-      />
+      <video ref={videoRef} title={title} controls className="w-full h-full" playsInline />
       {/* Indicador LIVE */}
-      <div className="absolute top-2 left-2 bg-red-600/90 text-white text-xs font-bold px-2 py-0.5 rounded-full flex items-center gap-1 pointer-events-none">
-        <span className="h-1.5 w-1.5 rounded-full bg-white animate-pulse" />
-        EN VIVO
-      </div>
+      {!error && (
+        <div className="absolute top-3 left-3 bg-red-600/90 text-white text-xs font-bold px-2 py-0.5 rounded-full flex items-center gap-1 pointer-events-none z-10">
+          <span className="h-1.5 w-1.5 rounded-full bg-white animate-pulse" />
+          EN VIVO
+        </div>
+      )}
     </div>
   )
 }
@@ -142,9 +126,8 @@ export function VideoPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [scope, setScope] = useState<'all' | 'cuba' | 'internacional'>('all')
   const [cubaMode, setCubaMode] = useState(false)
-  const [autoRefresh, setAutoRefresh] = useState(false)
+  const [showHealth, setShowHealth] = useState(false)
   const [lastHealthCheck, setLastHealthCheck] = useState<string | null>(null)
-  const autoRefreshRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const { data: list, isFetching: listLoading, refetch: refetchList } = useQuery({
     queryKey: ['videoSearch', query],
@@ -152,7 +135,7 @@ export function VideoPage() {
     staleTime: 60_000,
   })
 
-  const { data: meta } = useQuery({
+  const { data: meta, isLoading: metaLoading } = useQuery({
     queryKey: ['videoMeta', selectedId],
     queryFn: () => videoMeta(selectedId!),
     enabled: !!selectedId,
@@ -161,33 +144,10 @@ export function VideoPage() {
 
   const healthMutation = useMutation({
     mutationFn: () => videoChannelsHealth(12, 'cuba'),
-    onSuccess: () => {
-      setLastHealthCheck(new Date().toISOString())
-    },
+    onSuccess: () => setLastHealthCheck(new Date().toISOString()),
   })
 
-  // Auto-refresh: poll health every 60s cuando está activado
-  useEffect(() => {
-    if (autoRefresh) {
-      healthMutation.mutate()
-      autoRefreshRef.current = setInterval(() => {
-        healthMutation.mutate()
-      }, 60_000)
-    } else {
-      if (autoRefreshRef.current) {
-        clearInterval(autoRefreshRef.current)
-        autoRefreshRef.current = null
-      }
-    }
-    return () => {
-      if (autoRefreshRef.current) {
-        clearInterval(autoRefreshRef.current)
-        autoRefreshRef.current = null
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoRefresh])
-
+  // Seleccionar primer canal automáticamente
   useEffect(() => {
     if (!selectedId && list?.results?.length) {
       setSelectedId(list.results[0].id)
@@ -204,17 +164,12 @@ export function VideoPage() {
     for (const item of list?.results ?? []) {
       const category = (item.category || 'General').trim() || 'General'
       const catLower = category.toLowerCase()
-      const isCuba = catLower.includes('cuba')
-      const isInternacional = catLower.includes('internacional')
-      if (scope === 'cuba' && !isCuba) continue
-      if (scope === 'internacional' && !isInternacional) continue
+      if (scope === 'cuba' && !catLower.includes('cuba')) continue
+      if (scope === 'internacional' && !catLower.includes('internacional')) continue
       if (cubaMode && !item.cuba_ready) continue
       const existing = groups.get(category)
-      if (existing) {
-        existing.push(item)
-      } else {
-        groups.set(category, [item])
-      }
+      if (existing) existing.push(item)
+      else groups.set(category, [item])
     }
     return Array.from(groups.entries()).sort((a, b) => {
       const ai = CATEGORY_ORDER.indexOf(a[0])
@@ -227,266 +182,237 @@ export function VideoPage() {
   }, [list, scope, cubaMode])
 
   const handleVerTodo = () => {
-    setQ('')
-    setQuery('')
+    setQ(''); setQuery('')
     queryClient.invalidateQueries({ queryKey: ['videoSearch', ''] })
     refetchList()
   }
 
+  // Stream URL para el player (proxy HLS espejo)
+  const playerSrc = meta?.has_hls && meta?.hls_proxy_url ? meta.hls_proxy_url : null
+  const fallbackUrl = meta?.cuba_url || (selectedId ? `/api/video/${encodeURIComponent(selectedId)}/stream?mode=cuba` : undefined)
+
   return (
-    <div className="space-y-6">
-      {/* ── Player embebido — aparece cuando el canal tiene HLS ── */}
-      {selectedId && meta?.has_hls && meta?.hls_proxy_url && (
-        <section className="rounded-xl overflow-hidden border border-[rgba(56,139,253,0.3)] bg-[rgba(22,27,34,0.85)]">
-          <div className="px-4 py-2 border-b border-[rgba(56,139,253,0.2)] flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="font-semibold text-[#e6edf3] truncate">{meta.title}</span>
-              <span className="text-muted text-xs">· {meta.channel}</span>
+    <div className="space-y-4">
+
+      {/* ── Layout principal: player + lista de canales ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4 items-start">
+
+        {/* ── Player ── */}
+        <div className="space-y-3">
+          {/* Título del canal activo */}
+          {selectedChannel && (
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <h2 className="text-lg font-semibold text-[#e6edf3]">{selectedChannel.title}</h2>
+                <p className="text-muted text-xs mt-0.5">{selectedChannel.channel} · En vivo</p>
+              </div>
+              {fallbackUrl && (
+                <a
+                  href={fallbackUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex-shrink-0 text-xs px-3 py-1.5 rounded-lg border border-[rgba(56,139,253,0.3)] text-muted hover:text-accent transition"
+                >
+                  ↗ Abrir sitio web
+                </a>
+              )}
             </div>
-            <div className="flex items-center gap-2 flex-shrink-0">
-              <a
-                href={meta.cuba_url || `/api/video/${encodeURIComponent(selectedId)}/stream?mode=cuba`}
-                target="_blank"
-                rel="noreferrer"
-                className="text-xs px-2 py-1 rounded border border-[rgba(56,139,253,0.3)] text-muted hover:text-accent transition"
-                title="Abrir en nueva pestaña"
-              >
-                ↗ Nueva pestaña
-              </a>
+          )}
+
+          {/* Player HLS embebido */}
+          {metaLoading && selectedId && (
+            <div className="aspect-video bg-[#0d1117] rounded-xl flex items-center justify-center border border-[rgba(56,139,253,0.2)]">
+              <span className="h-10 w-10 rounded-full border-2 border-accent border-t-transparent animate-spin" />
             </div>
-          </div>
-          <HLSPlayer
-            key={meta.hls_proxy_url}
-            src={meta.hls_proxy_url}
-            title={meta.title}
-          />
-          <p className="px-4 py-2 text-xs text-muted/60">
-            Stream en vivo via proxy espejo · Si no carga, el canal puede estar fuera del aire
-          </p>
-        </section>
-      )}
+          )}
 
-      {/* ── Sin HLS: mostrar botones de enlace ── */}
-      {selectedId && meta && !meta.has_hls && (
-        <section className="rounded-xl border border-[rgba(56,139,253,0.3)] bg-[rgba(22,27,34,0.85)] p-5">
-          <h3 className="text-accent font-semibold mb-1">{meta.title}</h3>
-          <p className="text-muted text-sm mb-3">
-            {meta.description || selectedChannel?.description || 'Canal de TV en vivo'} · Este canal no tiene stream HLS disponible. Se abrirá en el sitio web oficial.
-          </p>
-          <div className="flex flex-wrap gap-2">
-            <a
-              href={meta.cuba_url || `/api/video/${encodeURIComponent(selectedId)}/stream?mode=cuba`}
-              target="_blank"
-              rel="noreferrer"
-              className="rounded-lg bg-accent/20 text-accent px-4 py-2 font-medium hover:bg-accent/30 transition"
-            >
-              Abrir canal (modo Cuba)
-            </a>
-            <a
-              href={meta.watch_url || `/api/video/${encodeURIComponent(selectedId)}/stream`}
-              target="_blank"
-              rel="noreferrer"
-              className="rounded-lg border border-[rgba(56,139,253,0.4)] px-4 py-2 text-sm text-muted hover:text-accent hover:border-accent/50"
-            >
-              Abrir canal (directo)
-            </a>
-          </div>
-        </section>
-      )}
+          {!metaLoading && playerSrc && (
+            <HLSPlayer
+              key={playerSrc}
+              src={playerSrc}
+              title={selectedChannel?.title ?? ''}
+              fallbackUrl={fallbackUrl}
+            />
+          )}
 
-      {/* ── Búsqueda y filtros ── */}
-      <section className="rounded-xl border border-[rgba(56,139,253,0.3)] bg-[rgba(22,27,34,0.85)] p-5 backdrop-blur">
-        <h2 className="text-accent font-semibold mb-1">TV en vivo · Canales en español</h2>
-        <p className="text-muted text-xs mb-4">
-          Los canales marcados <span className="text-green-300">con stream HLS</span> se reproducen directamente en la app.
-          Los demás abren el sitio web oficial.
-        </p>
-        <form
-          onSubmit={(e) => {
-            e.preventDefault()
-            setQuery(q.trim())
-          }}
-          className="flex flex-wrap gap-2"
-        >
-          <input
-            type="search"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Buscar canal (ej: RTVE, DW, Caribe, France 24)..."
-            className="flex-1 min-w-[220px] rounded-lg border border-[rgba(56,139,253,0.3)] bg-[#0d1117] px-4 py-2.5 text-[#e6edf3] placeholder-muted focus:border-accent focus:outline-none"
-          />
-          <button type="submit" className="rounded-lg bg-accent/20 text-accent px-4 py-2.5 font-medium hover:bg-accent/30 transition">
-            Buscar
-          </button>
-          <button
-            type="button"
-            className="rounded-lg border border-[rgba(56,139,253,0.4)] px-4 py-2.5 text-sm text-muted hover:text-accent hover:border-accent/50"
-            onClick={handleVerTodo}
-          >
-            Ver todo
-          </button>
-        </form>
-      </section>
+          {!metaLoading && meta && !playerSrc && (
+            <div className="aspect-video bg-[#0d1117] rounded-xl flex flex-col items-center justify-center gap-4 border border-[rgba(56,139,253,0.2)]">
+              <span className="text-5xl">📺</span>
+              <div className="text-center">
+                <p className="text-[#e6edf3] font-medium">{meta.title}</p>
+                <p className="text-muted text-sm mt-1">{meta.description || 'Canal sin stream HLS directo'}</p>
+              </div>
+              <div className="flex gap-2">
+                {fallbackUrl && (
+                  <a
+                    href={fallbackUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="px-4 py-2 text-sm rounded-lg bg-accent/20 text-accent hover:bg-accent/30 transition font-medium"
+                  >
+                    Abrir canal (modo Cuba)
+                  </a>
+                )}
+                {meta.watch_url && (
+                  <a
+                    href={meta.watch_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="px-4 py-2 text-sm rounded-lg border border-[rgba(56,139,253,0.4)] text-muted hover:text-accent transition"
+                  >
+                    Abrir directo
+                  </a>
+                )}
+              </div>
+            </div>
+          )}
 
-      {/* ── Lista de canales ── */}
-      <section className="rounded-xl border border-[rgba(56,139,253,0.3)] bg-[rgba(22,27,34,0.85)] p-5 backdrop-blur">
-        <div className="mb-4 flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setScope('all')}
-            className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
-              scope === 'all'
-                ? 'border-accent bg-accent/20 text-accent'
-                : 'border-[rgba(56,139,253,0.35)] bg-[rgba(56,139,253,0.08)] text-muted hover:text-accent hover:border-accent/50'
-            }`}
-          >
-            Todo
-          </button>
-          <button
-            type="button"
-            onClick={() => setScope('cuba')}
-            className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
-              scope === 'cuba'
-                ? 'border-green-400/60 bg-green-500/20 text-green-300'
-                : 'border-[rgba(34,197,94,0.35)] bg-[rgba(34,197,94,0.08)] text-muted hover:text-green-300 hover:border-green-400/60'
-            }`}
-          >
-            Solo Cuba
-          </button>
-          <button
-            type="button"
-            onClick={() => setScope('internacional')}
-            className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
-              scope === 'internacional'
-                ? 'border-amber-400/60 bg-amber-500/20 text-amber-300'
-                : 'border-[rgba(245,158,11,0.35)] bg-[rgba(245,158,11,0.08)] text-muted hover:text-amber-300 hover:border-amber-400/60'
-            }`}
-          >
-            Solo Internacional
-          </button>
-          <button
-            type="button"
-            onClick={() => setCubaMode((v) => !v)}
-            className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ml-auto ${
-              cubaMode
-                ? 'border-green-400/60 bg-green-500/20 text-green-300'
-                : 'border-[rgba(34,197,94,0.3)] text-muted hover:text-green-300 hover:border-green-400/40'
-            }`}
-            title="Mostrar solo canales listos para Cuba"
-          >
-            {cubaMode ? 'Cuba Mode: ON' : 'Cuba Mode'}
-          </button>
+          {!selectedId && !listLoading && (
+            <div className="aspect-video bg-[#0d1117] rounded-xl flex flex-col items-center justify-center gap-3 border border-[rgba(56,139,253,0.2)]">
+              <span className="text-5xl">📺</span>
+              <p className="text-muted text-sm">Selecciona un canal de la lista para ver en vivo</p>
+            </div>
+          )}
         </div>
-        {listLoading && <Skeleton />}
-        {list && (
-          <div className="space-y-4">
-            {groupedChannels.map(([category, channels]) => (
-              <div key={category}>
-                <div
-                  className={`mb-2 inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold ${
-                    CATEGORY_STYLE[category] || 'border-[rgba(56,139,253,0.35)] bg-[rgba(56,139,253,0.12)] text-accent'
+
+        {/* ── Lista de canales ── */}
+        <div className="rounded-xl border border-[rgba(56,139,253,0.3)] bg-[rgba(22,27,34,0.85)] overflow-hidden">
+          {/* Filtros */}
+          <div className="px-3 py-2.5 border-b border-[rgba(56,139,253,0.15)] space-y-2">
+            <form
+              onSubmit={(e) => { e.preventDefault(); setQuery(q.trim()) }}
+              className="flex gap-1.5"
+            >
+              <input
+                type="search"
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Buscar canal…"
+                className="flex-1 min-w-0 rounded-lg border border-[rgba(56,139,253,0.3)] bg-[#0d1117] px-3 py-1.5 text-[#e6edf3] text-sm placeholder-muted/50 focus:border-accent focus:outline-none"
+              />
+              <button type="submit" className="px-3 py-1.5 rounded-lg bg-accent/20 text-accent text-sm hover:bg-accent/30 transition flex-shrink-0">Buscar</button>
+              {query && (
+                <button type="button" onClick={handleVerTodo} className="px-2 py-1.5 rounded-lg border border-[rgba(56,139,253,0.3)] text-muted text-xs hover:text-accent transition flex-shrink-0">✕</button>
+              )}
+            </form>
+            <div className="flex flex-wrap gap-1.5">
+              {(['all', 'cuba', 'internacional'] as const).map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => setScope(s)}
+                  className={`text-xs px-2.5 py-1 rounded-full border transition ${
+                    scope === s ? 'border-accent bg-accent/20 text-accent' : 'border-[rgba(56,139,253,0.25)] text-muted hover:text-accent'
                   }`}
                 >
-                  {category} ({channels.length})
+                  {s === 'all' ? 'Todos' : s === 'cuba' ? '🇨🇺 Cuba' : '🌍 Intl'}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => setCubaMode((v) => !v)}
+                className={`ml-auto text-xs px-2.5 py-1 rounded-full border transition ${cubaMode ? 'border-green-400/60 bg-green-500/20 text-green-300' : 'border-[rgba(34,197,94,0.3)] text-muted hover:text-green-300'}`}
+              >
+                {cubaMode ? 'Cuba ✓' : 'Cuba Mode'}
+              </button>
+            </div>
+          </div>
+
+          {/* Canal list — scrollable */}
+          <div className="overflow-y-auto max-h-[60vh] lg:max-h-[calc(100vh-260px)]">
+            {listLoading && (
+              <div className="p-4 space-y-2 animate-pulse">
+                {[1,2,3,4,5].map(i => <div key={i} className="h-14 rounded-lg bg-[rgba(56,139,253,0.07)]" />)}
+              </div>
+            )}
+            {!listLoading && groupedChannels.map(([category, channels]) => (
+              <div key={category}>
+                <div className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider sticky top-0 z-10 border-b border-[rgba(56,139,253,0.1)] ${
+                  CATEGORY_STYLE[category] || 'text-accent bg-[rgba(22,27,34,0.95)]'
+                } bg-[rgba(13,17,23,0.97)]`}>
+                  {category}
                 </div>
-                <ul className="space-y-2">
-                  {channels.map((v) => (
-                    <li
+                {channels.map((v) => {
+                  const active = selectedId === v.id
+                  return (
+                    <button
                       key={v.id}
-                      className={`rounded-lg border p-3 cursor-pointer transition ${selectedId === v.id ? 'border-accent bg-accent/10' : 'border-[rgba(56,139,253,0.2)] hover:border-accent/50'}`}
+                      type="button"
                       onClick={() => setSelectedId(v.id)}
+                      className={`w-full text-left px-3 py-2.5 border-b border-[rgba(56,139,253,0.08)] transition-colors flex items-center gap-2.5 ${
+                        active
+                          ? 'bg-accent/15 border-l-2 border-l-accent'
+                          : 'hover:bg-[rgba(56,139,253,0.07)] border-l-2 border-l-transparent'
+                      }`}
                     >
-                      <span className="font-medium block truncate">{v.title}</span>
-                      <span className="text-muted text-sm">{v.channel} · En vivo</span>
-                      <div className="mt-1.5 flex items-center gap-2 text-xs flex-wrap">
-                        <span className={`rounded-full px-2 py-0.5 ${v.cuba_ready ? 'bg-green-500/15 text-green-300' : 'bg-yellow-500/15 text-yellow-300'}`}>
-                          {v.cuba_ready ? 'Cuba OK' : 'Verificar ruta'}
-                        </span>
-                        {selectedId === v.id && meta?.has_hls && (
-                          <span className="rounded-full px-2 py-0.5 bg-blue-500/15 text-blue-300">
-                            ▶ Stream HLS
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-sm font-medium truncate ${active ? 'text-accent' : 'text-[#e6edf3]'}`}>{v.title}</p>
+                        <p className="text-muted text-xs truncate">{v.channel}</p>
+                      </div>
+                      <div className="flex flex-col items-end gap-0.5 flex-shrink-0">
+                        {v.cuba_ready && (
+                          <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-green-500/15 text-green-400">Cuba OK</span>
+                        )}
+                        {active && (
+                          <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-red-500/20 text-red-400 flex items-center gap-0.5">
+                            <span className="h-1 w-1 rounded-full bg-red-400 animate-pulse" />
+                            Vivo
                           </span>
                         )}
                       </div>
-                    </li>
-                  ))}
-                </ul>
+                    </button>
+                  )
+                })}
               </div>
             ))}
-          </div>
-        )}
-        {!listLoading && list && list.results.length === 0 && (
-          <p className="text-sm text-muted">No hay canales para ese filtro. Pruebe con "Ver todo".</p>
-        )}
-        {!listLoading && list && list.results.length > 0 && groupedChannels.length === 0 && (
-          <p className="text-sm text-muted">
-            No hay canales en este alcance. {cubaMode && 'Desactive Cuba Mode o '}Cambie a <strong>Todo</strong>.
-          </p>
-        )}
-      </section>
-
-      {/* ── Chequeo de canales ── */}
-      <section className="rounded-xl border border-[rgba(56,139,253,0.3)] bg-[rgba(22,27,34,0.85)] p-5 backdrop-blur">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <h3 className="text-accent font-semibold">Chequeo de canales</h3>
-            <p className="text-muted text-sm">Verifica disponibilidad desde el servidor.</p>
-            {lastHealthCheck && (
-              <p className="text-xs text-muted mt-1">Ultimo chequeo: {formatTimestamp(lastHealthCheck)}</p>
+            {!listLoading && groupedChannels.length === 0 && (
+              <p className="text-muted text-sm p-4 text-center">Sin canales para este filtro.</p>
             )}
           </div>
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => setAutoRefresh((v) => !v)}
-              className={`rounded-lg border px-3 py-2 text-sm font-medium transition ${
-                autoRefresh
-                  ? 'border-green-400/50 bg-green-500/15 text-green-300 hover:bg-green-500/25'
-                  : 'border-[rgba(56,139,253,0.3)] text-muted hover:text-accent hover:border-accent/50'
-              }`}
-            >
-              {autoRefresh ? 'Auto-refresh: ON' : 'Auto-refresh'}
-            </button>
+        </div>
+      </div>
+
+      {/* ── Chequeo de canales (colapsable) ── */}
+      <div className="rounded-xl border border-[rgba(56,139,253,0.2)] bg-[rgba(22,27,34,0.6)] overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setShowHealth(v => !v)}
+          className="w-full px-4 py-3 flex items-center justify-between text-sm text-muted hover:text-accent transition"
+        >
+          <span>Chequeo de disponibilidad de canales {lastHealthCheck && `· último: ${formatTimestamp(lastHealthCheck)}`}</span>
+          <span>{showHealth ? '▲' : '▼'}</span>
+        </button>
+        {showHealth && (
+          <div className="px-4 pb-4 border-t border-[rgba(56,139,253,0.15)] pt-3 space-y-3">
             <button
               onClick={() => healthMutation.mutate()}
               disabled={healthMutation.isPending}
-              className="rounded-lg bg-accent/20 text-accent px-4 py-2 font-medium hover:bg-accent/30 disabled:opacity-60"
+              className="px-4 py-2 rounded-lg bg-accent/20 text-accent text-sm font-medium hover:bg-accent/30 disabled:opacity-60 transition"
             >
               {healthMutation.isPending ? 'Comprobando...' : 'Comprobar ahora'}
             </button>
-          </div>
-        </div>
-
-        {healthMutation.data && (
-          <div className="mt-4 space-y-3">
-            <p className="text-sm text-muted">
-              Resultado: {healthMutation.data.reachable}/{healthMutation.data.total} accesibles ({healthMutation.data.mode})
-              {healthMutation.data.unavailable > 0 && (
-                <span className="text-red-400 ml-2">{healthMutation.data.unavailable} no disponibles</span>
-              )}
-            </p>
-            <div className="space-y-2">
-              {healthMutation.data.items.map((item) => (
-                <div key={item.id} className="rounded-lg border border-[rgba(56,139,253,0.2)] p-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">{item.title}</span>
-                      {item.cuba_ready && (
-                        <span className="rounded-full px-2 py-0.5 text-xs bg-green-500/15 text-green-300">Cuba OK</span>
-                      )}
+            {healthMutation.data && (
+              <div className="space-y-2">
+                <p className="text-muted text-xs">
+                  {healthMutation.data.reachable}/{healthMutation.data.total} accesibles
+                  {healthMutation.data.unavailable > 0 && <span className="text-red-400 ml-1">· {healthMutation.data.unavailable} no disponibles</span>}
+                </p>
+                {healthMutation.data.items.map((item) => (
+                  <div key={item.id} className="rounded-lg border border-[rgba(56,139,253,0.15)] p-2.5 text-xs">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-medium text-[#e6edf3]">{item.title}</span>
+                      <span className={`px-1.5 py-0.5 rounded-full ${item.reachable ? 'bg-green-500/15 text-green-300' : 'bg-red-500/15 text-red-300'}`}>
+                        {item.reachable ? `OK ${item.latency_ms}ms` : 'Fallo'}
+                      </span>
                     </div>
-                    <span className={`text-xs rounded-full px-2 py-0.5 ${item.reachable ? 'bg-green-500/15 text-green-300' : 'bg-red-500/15 text-red-300'}`}>
-                      {item.reachable ? `OK (${item.status_code})` : `Fallo (${item.status_code || 'sin codigo'})`}
-                    </span>
+                    {item.error && <p className="text-red-400/70 mt-1 truncate">{item.error}</p>}
                   </div>
-                  <p className="mt-1 text-xs text-muted break-all">{item.url}</p>
-                  <p className="mt-1 text-xs text-muted">Latencia: {item.latency_ms} ms {item.error ? `· ${item.error}` : ''}</p>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
-      </section>
+      </div>
     </div>
   )
 }

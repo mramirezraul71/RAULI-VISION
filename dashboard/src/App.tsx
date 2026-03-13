@@ -76,8 +76,8 @@ export default function App() {
 
         {/* ── Header ─────────────────────────────────────────────────────── */}
         <header className="border-b border-[rgba(56,139,253,0.3)] bg-[rgba(22,27,34,0.9)] backdrop-blur sticky top-0 z-20">
-          <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
-
+          {/* Fila superior: logo + botón actualización (desktop) */}
+          <div className="max-w-6xl mx-auto px-4 pt-2.5 pb-0 flex items-center justify-between gap-3">
             {/* Logo + estado */}
             <div className="flex items-center gap-2.5 min-w-0">
               <h1 className="text-lg font-semibold text-accent tracking-tight whitespace-nowrap">RAULI-VISION</h1>
@@ -85,31 +85,15 @@ export default function App() {
                 {connected ? '● Conectado' : '○ Local'}
               </span>
             </div>
-
-            {/* Desktop: botón actualización + nav */}
-            <div className="hidden md:flex items-center gap-2 flex-shrink-0">
-              <button
-                type="button"
-                onClick={handleCheckUpdate}
-                disabled={checkingUpdate}
-                className="text-xs px-2 py-1 rounded-lg border border-[rgba(56,139,253,0.3)] text-muted hover:text-accent hover:border-accent/50 transition disabled:opacity-50 whitespace-nowrap"
-              >
-                {checkingUpdate ? 'Buscando…' : 'Buscar actualización'}
-              </button>
-              <nav className="flex gap-0.5">
-                {TABS.map((t) => (
-                  <button
-                    key={t.id}
-                    onClick={() => setTab(t.id)}
-                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition whitespace-nowrap ${
-                      tab === t.id ? 'bg-accent/20 text-accent' : 'text-muted hover:text-[#e6edf3]'
-                    }`}
-                  >
-                    {t.id === 'tiktok' ? `${t.icon} ${t.label}` : t.label}
-                  </button>
-                ))}
-              </nav>
-            </div>
+            {/* Desktop: botón actualización */}
+            <button
+              type="button"
+              onClick={handleCheckUpdate}
+              disabled={checkingUpdate}
+              className="hidden md:block flex-shrink-0 text-xs px-2 py-1 rounded-lg border border-[rgba(56,139,253,0.3)] text-muted hover:text-accent hover:border-accent/50 transition disabled:opacity-50 whitespace-nowrap"
+            >
+              {checkingUpdate ? 'Buscando…' : 'Actualizar'}
+            </button>
 
             {/* Mobile: botón actualización compacto */}
             <button
@@ -123,12 +107,31 @@ export default function App() {
               {checkingUpdate ? (
                 <span className="h-3.5 w-3.5 rounded-full border-2 border-muted border-t-transparent animate-spin inline-block" />
               ) : (
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <svg xmlns="http://www.w3.org/2020/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                 </svg>
               )}
             </button>
+          </div>
 
+          {/* Fila inferior: nav de tabs — solo desktop, scrollable */}
+          <div className="hidden md:block border-t border-[rgba(56,139,253,0.15)]">
+            <div className="max-w-6xl mx-auto px-4">
+              <nav className="flex overflow-x-auto scrollbar-hide gap-0.5 py-1">
+                {TABS.map((t) => (
+                  <button
+                    key={t.id}
+                    onClick={() => setTab(t.id)}
+                    className={`flex-shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium transition whitespace-nowrap ${
+                      tab === t.id ? 'bg-accent/20 text-accent' : 'text-muted hover:text-[#e6edf3]'
+                    }`}
+                  >
+                    <span>{t.icon}</span>
+                    <span>{t.shortLabel}</span>
+                  </button>
+                ))}
+              </nav>
+            </div>
           </div>
         </header>
 
