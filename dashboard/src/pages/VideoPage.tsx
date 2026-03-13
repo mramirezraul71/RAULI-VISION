@@ -25,7 +25,7 @@ function formatTimestamp(iso?: string) {
 }
 
 // ── HLS Player embebido ──────────────────────────────────────────────────────
-function HLSPlayer({ src, title, fallbackUrl }: { src: string; title: string; fallbackUrl?: string }) {
+function HLSPlayer({ src, title, fallbackUrl, fallbackYouTubeUrl }: { src: string; title: string; fallbackUrl?: string; fallbackYouTubeUrl?: string }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const hlsRef = useRef<Hls | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -93,13 +93,15 @@ function HLSPlayer({ src, title, fallbackUrl }: { src: string; title: string; fa
               Reintentar
             </button>
             {fallbackUrl && (
-              <a
-                href={fallbackUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="px-3 py-1.5 text-xs rounded-lg border border-[rgba(56,139,253,0.4)] text-muted hover:text-accent transition"
-              >
-                Abrir en sitio web
+              <a href={fallbackUrl} target="_blank" rel="noreferrer"
+                className="px-3 py-1.5 text-xs rounded-lg border border-[rgba(56,139,253,0.4)] text-muted hover:text-accent transition">
+                Sitio oficial
+              </a>
+            )}
+            {fallbackYouTubeUrl && (
+              <a href={fallbackYouTubeUrl} target="_blank" rel="noreferrer"
+                className="px-3 py-1.5 text-xs rounded-lg border border-[rgba(56,139,253,0.4)] text-muted hover:text-accent transition">
+                Ver en YouTube
               </a>
             )}
           </div>
@@ -189,7 +191,9 @@ export function VideoPage() {
 
   // Stream URL para el player (proxy HLS espejo)
   const playerSrc = meta?.has_hls && meta?.hls_proxy_url ? meta.hls_proxy_url : null
-  const fallbackUrl = meta?.cuba_url || (selectedId ? `/api/video/${encodeURIComponent(selectedId)}/stream?mode=cuba` : undefined)
+  // URL directa del sitio web del canal (NO pasa por el espejo — evita 421 de Cloudflare)
+  const webUrl = meta?.web_url || undefined
+  const fallbackWebUrl = meta?.fallback_web_url || undefined
 
   return (
     <div className="space-y-4">
@@ -206,15 +210,21 @@ export function VideoPage() {
                 <h2 className="text-lg font-semibold text-[#e6edf3]">{selectedChannel.title}</h2>
                 <p className="text-muted text-xs mt-0.5">{selectedChannel.channel} · En vivo</p>
               </div>
-              {fallbackUrl && (
-                <a
-                  href={fallbackUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="flex-shrink-0 text-xs px-3 py-1.5 rounded-lg border border-[rgba(56,139,253,0.3)] text-muted hover:text-accent transition"
-                >
-                  ↗ Abrir sitio web
-                </a>
+              {(webUrl || fallbackWebUrl) && (
+                <div className="flex-shrink-0 flex gap-1.5">
+                  {webUrl && (
+                    <a href={webUrl} target="_blank" rel="noreferrer"
+                      className="text-xs px-3 py-1.5 rounded-lg border border-[rgba(56,139,253,0.3)] text-muted hover:text-accent transition">
+                      ↗ Sitio web
+                    </a>
+                  )}
+                  {fallbackWebUrl && (
+                    <a href={fallbackWebUrl} target="_blank" rel="noreferrer"
+                      className="text-xs px-3 py-1.5 rounded-lg border border-[rgba(56,139,253,0.3)] text-muted hover:text-accent transition">
+                      ↗ YouTube
+                    </a>
+                  )}
+                </div>
               )}
             </div>
           )}
@@ -231,7 +241,8 @@ export function VideoPage() {
               key={playerSrc}
               src={playerSrc}
               title={selectedChannel?.title ?? ''}
-              fallbackUrl={fallbackUrl}
+              fallbackUrl={webUrl}
+              fallbackYouTubeUrl={fallbackWebUrl}
             />
           )}
 
@@ -242,25 +253,17 @@ export function VideoPage() {
                 <p className="text-[#e6edf3] font-medium">{meta.title}</p>
                 <p className="text-muted text-sm mt-1">{meta.description || 'Canal sin stream HLS directo'}</p>
               </div>
-              <div className="flex gap-2">
-                {fallbackUrl && (
-                  <a
-                    href={fallbackUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="px-4 py-2 text-sm rounded-lg bg-accent/20 text-accent hover:bg-accent/30 transition font-medium"
-                  >
-                    Abrir canal (modo Cuba)
+              <div className="flex gap-2 flex-wrap justify-center">
+                {webUrl && (
+                  <a href={webUrl} target="_blank" rel="noreferrer"
+                    className="px-4 py-2 text-sm rounded-lg bg-accent/20 text-accent hover:bg-accent/30 transition font-medium">
+                    Abrir sitio oficial
                   </a>
                 )}
-                {meta.watch_url && (
-                  <a
-                    href={meta.watch_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="px-4 py-2 text-sm rounded-lg border border-[rgba(56,139,253,0.4)] text-muted hover:text-accent transition"
-                  >
-                    Abrir directo
+                {fallbackWebUrl && (
+                  <a href={fallbackWebUrl} target="_blank" rel="noreferrer"
+                    className="px-4 py-2 text-sm rounded-lg border border-[rgba(56,139,253,0.4)] text-muted hover:text-accent transition">
+                    Ver en YouTube
                   </a>
                 )}
               </div>

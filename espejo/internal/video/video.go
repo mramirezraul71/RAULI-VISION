@@ -29,6 +29,8 @@ type VideoMeta struct {
 	Description string   `json:"description,omitempty"`
 	WatchURL    string   `json:"watch_url,omitempty"`
 	CubaURL     string   `json:"cuba_url,omitempty"`
+	WebURL      string   `json:"web_url,omitempty"`      // URL directa del sitio web del canal (sin pasar por espejo)
+	FallbackWebURL string `json:"fallback_web_url,omitempty"` // YouTube u otra alternativa
 	HLSProxyURL string   `json:"hls_proxy_url,omitempty"` // Proxy HLS endpoint para player embebido
 	HasHLS      bool     `json:"has_hls"`                  // true si tiene stream m3u8 directo
 }
@@ -159,16 +161,18 @@ func (s *Service) Meta(id string) (VideoMeta, bool) {
 		return VideoMeta{}, false
 	}
 	meta := VideoMeta{
-		ID:          ch.ID,
-		Title:       ch.Title,
-		Channel:     ch.Channel,
-		DurationSec: 0,
-		Qualities:   []string{"auto", "360p", "480p"},
-		Ready:       true,
-		Live:        true,
-		Description: ch.Description,
-		WatchURL:    "/api/video/" + url.PathEscape(ch.ID) + "/stream",
-		CubaURL:     "/api/video/" + url.PathEscape(ch.ID) + "/stream?mode=cuba",
+		ID:             ch.ID,
+		Title:          ch.Title,
+		Channel:        ch.Channel,
+		DurationSec:    0,
+		Qualities:      []string{"auto", "360p", "480p"},
+		Ready:          true,
+		Live:           true,
+		Description:    ch.Description,
+		WatchURL:       "/api/video/" + url.PathEscape(ch.ID) + "/stream",
+		CubaURL:        "/api/video/" + url.PathEscape(ch.ID) + "/stream?mode=cuba",
+		WebURL:         ch.URL,         // URL directa — el frontend la usa sin pasar por espejo
+		FallbackWebURL: ch.FallbackURL, // YouTube u otra alternativa
 	}
 	if ch.StreamM3U8 != "" {
 		meta.HLSProxyURL = "/api/video/hls?url=" + url.QueryEscape(ch.StreamM3U8)

@@ -174,6 +174,8 @@ export async function videoMeta(id: string): Promise<{
   description?: string
   watch_url?: string
   cuba_url?: string
+  web_url?: string
+  fallback_web_url?: string
   hls_proxy_url?: string
   has_hls?: boolean
 }> {
