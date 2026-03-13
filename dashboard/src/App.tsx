@@ -14,17 +14,28 @@ import { ChatPage } from './pages/ChatPage'
 import { CamiPage } from './pages/CamiPage'
 import { AccessPage } from './pages/AccessPage'
 import { TikTokPage } from './pages/TikTokPage'
+import { YouTubePage } from './pages/YouTubePage'
+import { RadioPage } from './pages/RadioPage'
+import { NoticiasPage } from './pages/NoticiasPage'
+import { ClimaPage } from './pages/ClimaPage'
+import { TraducirPage } from './pages/TraducirPage'
 import { APP_VERSION, CHANGELOG } from './constants/version'
 
 type Tab = 'search' | 'video' | 'tiktok' | 'chat' | 'cami' | 'access'
+         | 'youtube' | 'radio' | 'noticias' | 'clima' | 'traducir'
 
 const TABS: { id: Tab; label: string; shortLabel: string; icon: string }[] = [
-  { id: 'search', label: 'Búsqueda', shortLabel: 'Buscar', icon: '🔍' },
-  { id: 'video',  label: 'Video',    shortLabel: 'Video',  icon: '📺' },
-  { id: 'tiktok', label: 'TikTok',   shortLabel: 'TikTok', icon: '▶' },
-  { id: 'chat',   label: 'IA',       shortLabel: 'IA',     icon: '💬' },
-  { id: 'cami',   label: 'CAMI',     shortLabel: 'CAMI',   icon: '🎵' },
-  { id: 'access', label: 'Acceso',   shortLabel: 'Acceso', icon: '🔐' },
+  { id: 'search',   label: 'Búsqueda',    shortLabel: 'Buscar',  icon: '🔍' },
+  { id: 'video',    label: 'TV',          shortLabel: 'TV',      icon: '📺' },
+  { id: 'youtube',  label: 'YouTube',     shortLabel: 'YT',      icon: '▶' },
+  { id: 'tiktok',   label: 'TikTok',      shortLabel: 'TikTok',  icon: '🎬' },
+  { id: 'radio',    label: 'Radio',       shortLabel: 'Radio',   icon: '📻' },
+  { id: 'noticias', label: 'Noticias',    shortLabel: 'Noticias',icon: '📰' },
+  { id: 'chat',     label: 'IA',          shortLabel: 'IA',      icon: '💬' },
+  { id: 'cami',     label: 'CAMI',        shortLabel: 'CAMI',    icon: '🎵' },
+  { id: 'clima',    label: 'Clima',       shortLabel: 'Clima',   icon: '☀️' },
+  { id: 'traducir', label: 'Traducir',    shortLabel: 'Traduc.', icon: '🌐' },
+  { id: 'access',   label: 'Acceso',      shortLabel: 'Acceso',  icon: '🔐' },
 ]
 
 export default function App() {
@@ -129,12 +140,17 @@ export default function App() {
         {/* ── Main content ───────────────────────────────────────────────── */}
         {/* pb-20: espacio para la bottom nav en móvil */}
         <main className="max-w-4xl mx-auto px-4 py-6 flex-1 w-full pb-20 md:pb-6">
-          {tab === 'search' && <SearchPage />}
-          {tab === 'video'  && <VideoPage />}
-          {tab === 'tiktok' && <TikTokPage />}
-          {tab === 'chat'   && <ChatPage />}
-          {tab === 'cami'   && <CamiPage />}
-          {tab === 'access' && <AccessPage />}
+          {tab === 'search'   && <SearchPage />}
+          {tab === 'video'    && <VideoPage />}
+          {tab === 'tiktok'   && <TikTokPage />}
+          {tab === 'chat'     && <ChatPage />}
+          {tab === 'cami'     && <CamiPage />}
+          {tab === 'access'   && <AccessPage />}
+          {tab === 'youtube'  && <YouTubePage />}
+          {tab === 'radio'    && <RadioPage />}
+          {tab === 'noticias' && <NoticiasPage />}
+          {tab === 'clima'    && <ClimaPage />}
+          {tab === 'traducir' && <TraducirPage />}
         </main>
 
         {/* ── Footer — solo desktop ───────────────────────────────────────── */}
@@ -153,19 +169,18 @@ export default function App() {
           className="md:hidden fixed bottom-0 left-0 right-0 z-20 border-t border-[rgba(56,139,253,0.3)] bg-[rgba(13,17,23,0.97)] backdrop-blur-md safe-area-bottom"
           style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
         >
-          <div className="flex">
+          <div className="flex overflow-x-auto scrollbar-hide">
             {TABS.map((t) => {
               const active = tab === t.id
               return (
                 <button
                   key={t.id}
                   onClick={() => setTab(t.id)}
-                  className={`flex-1 flex flex-col items-center justify-center py-2 gap-0.5 relative transition-colors ${
+                  className={`flex-shrink-0 min-w-[56px] flex flex-col items-center justify-center py-2 gap-0.5 relative transition-colors ${
                     active ? 'text-accent' : 'text-muted/70 active:text-[#e6edf3]'
                   }`}
                   aria-label={t.label}
                 >
-                  {/* Indicador activo */}
                   {active && (
                     <span className="absolute top-0 inset-x-0 h-0.5 rounded-b-full bg-accent" />
                   )}
@@ -175,7 +190,7 @@ export default function App() {
                   >
                     {t.icon}
                   </span>
-                  <span className={`text-[9px] font-medium leading-none tracking-wide uppercase ${active ? 'text-accent' : 'text-muted/60'}`}>
+                  <span className={`text-[8px] font-medium leading-none tracking-wide uppercase ${active ? 'text-accent' : 'text-muted/60'}`}>
                     {t.shortLabel}
                   </span>
                 </button>

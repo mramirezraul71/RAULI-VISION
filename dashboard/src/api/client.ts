@@ -517,3 +517,179 @@ export async function processFeedback(data: {
   if (!r.ok) throw new Error(await parseError(r, 'Error al enviar feedback'))
   return r.json()
 }
+
+// ── Clima ─────────────────────────────────────────────────────────────────────
+
+export type WeatherCurrent = {
+  temperature_2m: number
+  apparent_temperature: number
+  relative_humidity_2m: number
+  wind_speed_10m: number
+  wind_direction_10m: number
+  precipitation: number
+  weather_code: number
+  is_day: number
+  time: string
+}
+
+export type WeatherDaily = {
+  date: string
+  temp_max: number
+  temp_min: number
+  precip_sum: number
+  weather_code: number
+}
+
+export type WeatherData = {
+  city: string
+  lat: number
+  lon: number
+  timezone: string
+  current: WeatherCurrent
+  daily: WeatherDaily[]
+  fetched_at: string
+}
+
+export async function climaByCity(city: string): Promise<WeatherData> {
+  const r = await fetch(withUser(`${BASE}/api/clima?city=${encodeURIComponent(city)}`))
+  if (!r.ok) throw new Error(await parseError(r, 'Error obteniendo clima'))
+  return r.json()
+}
+
+export async function climaCities(): Promise<{ cities: string[] }> {
+  const r = await fetch(`${BASE}/api/clima/cities`)
+  if (!r.ok) throw new Error('Error obteniendo ciudades')
+  return r.json()
+}
+
+// ── Noticias ──────────────────────────────────────────────────────────────────
+
+export type NewsArticle = {
+  title: string
+  link: string
+  description: string
+  pub_date: string
+  source: string
+  source_key: string
+  image_url?: string
+}
+
+export type NewsFeed = {
+  key: string
+  name: string
+  category: string
+  language: string
+}
+
+export async function noticiasFeeds(): Promise<{ feeds: NewsFeed[] }> {
+  const r = await fetch(`${BASE}/api/noticias/feeds`)
+  if (!r.ok) throw new Error('Error obteniendo fuentes de noticias')
+  return r.json()
+}
+
+export async function noticias(category: string, limit = 30): Promise<{ articles: NewsArticle[]; category: string; total: number }> {
+  const r = await fetch(withUser(`${BASE}/api/noticias?category=${encodeURIComponent(category)}&limit=${limit}`))
+  if (!r.ok) throw new Error(await parseError(r, 'Error obteniendo noticias'))
+  return r.json()
+}
+
+export async function noticiasByFeed(key: string, limit = 30): Promise<{ articles: NewsArticle[]; source: string; total: number }> {
+  const r = await fetch(withUser(`${BASE}/api/noticias/${encodeURIComponent(key)}?limit=${limit}`))
+  if (!r.ok) throw new Error(await parseError(r, 'Error obteniendo feed'))
+  return r.json()
+}
+
+// ── Radio ─────────────────────────────────────────────────────────────────────
+
+export type RadioStation = {
+  id: string
+  name: string
+  country: string
+  country_code: string
+  language: string
+  tags: string
+  codec: string
+  bitrate: number
+  stream_url: string
+  favicon?: string
+  votes: number
+  clickcount: number
+}
+
+export async function radioPopular(limit = 20, cc = ''): Promise<{ stations: RadioStation[]; total: number }> {
+  const qs = cc ? `?limit=${limit}&cc=${encodeURIComponent(cc)}` : `?limit=${limit}`
+  const r = await fetch(withUser(`${BASE}/api/radio/popular${qs}`))
+  if (!r.ok) throw new Error(await parseError(r, 'Error obteniendo estaciones'))
+  return r.json()
+}
+
+export async function radioSearch(q: string, limit = 20): Promise<{ stations: RadioStation[]; total: number; query: string }> {
+  const r = await fetch(withUser(`${BASE}/api/radio/search?q=${encodeURIComponent(q)}&limit=${limit}`))
+  if (!r.ok) throw new Error(await parseError(r, 'Error buscando estaciones'))
+  return r.json()
+}
+
+export async function radioByCountry(cc: string, limit = 20): Promise<{ stations: RadioStation[]; total: number }> {
+  const r = await fetch(withUser(`${BASE}/api/radio/country?cc=${encodeURIComponent(cc)}&limit=${limit}`))
+  if (!r.ok) throw new Error(await parseError(r, 'Error obteniendo estaciones del país'))
+  return r.json()
+}
+
+// ── Traducir ──────────────────────────────────────────────────────────────────
+
+export type TranslationResult = {
+  original_text: string
+  translated_text: string
+  lang_pair: string
+  match_quality: number
+  source: string
+}
+
+export type LangPair = {
+  code: string
+  label: string
+}
+
+export async function traducirPairs(): Promise<{ pairs: LangPair[] }> {
+  const r = await fetch(`${BASE}/api/traducir/pairs`)
+  if (!r.ok) throw new Error('Error obteniendo pares de idiomas')
+  return r.json()
+}
+
+export async function traducir(text: string, langPair: string): Promise<TranslationResult> {
+  const r = await fetch(`${BASE}/api/traducir`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text, lang_pair: langPair }),
+  })
+  if (!r.ok) throw new Error(await parseError(r, 'Traducción fallida'))
+  return r.json()
+}
+
+// ── YouTube ───────────────────────────────────────────────────────────────────
+
+export type YouTubeResult = {
+  id: string
+  title: string
+  author: string
+  duration_sec: number
+  thumbnail_url?: string
+  view_count?: number
+  published?: string
+}
+
+export async function youtubeSearch(q: string, max = 15): Promise<{ query: string; results: YouTubeResult[]; total: number }> {
+  const r = await fetch(withUser(`${BASE}/api/youtube/search?q=${encodeURIComponent(q)}&max=${max}`))
+  if (!r.ok) throw new Error(await parseError(r, 'Búsqueda de YouTube fallida'))
+  return r.json()
+}
+
+export async function youtubeStream(id: string): Promise<{ id: string; stream_url: string; source: string }> {
+  const r = await fetch(`${BASE}/api/youtube/stream?id=${encodeURIComponent(id)}`)
+  if (!r.ok) throw new Error(await parseError(r, 'No se pudo obtener el stream'))
+  return r.json()
+}
+
+export function youtubeProxyUrl(streamUrl: string): string {
+  return `${BASE}/api/youtube/proxy?url=${encodeURIComponent(streamUrl)}`
+}

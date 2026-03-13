@@ -8,18 +8,28 @@ import (
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/auth"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/cami"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/chat"
+	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/clima"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/feedback"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/middleware"
+	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/noticias"
+	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/radio"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/search"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/tiktok"
+	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/traducir"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/tts"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/video"
+	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/youtube"
 )
 
 func Register(mux *http.ServeMux, version string, authSvc *auth.Service, searchSvc *search.Service, videoSvc *video.Service, chatSvc *chat.Service, accessSvc *access.Service, adminToken string, rl *middleware.RateLimiter, ttsSvc *tts.Service) {
-	camiSvc := cami.New()
+	camiSvc     := cami.New()
 	feedbackSvc := feedback.New()
-	tiktokSvc := tiktok.New()
+	tiktokSvc   := tiktok.New()
+	climaSvc    := clima.New()
+	noticiasSvc := noticias.New()
+	radioSvc    := radio.New()
+	traducirSvc := traducir.New()
+	youtubeSvc  := youtube.New()
 
 	h := &Handlers{
 		Auth:       authSvc,
@@ -31,6 +41,11 @@ func Register(mux *http.ServeMux, version string, authSvc *auth.Service, searchS
 		Access:     accessSvc,
 		TikTok:     tiktokSvc,
 		TTS:        ttsSvc,
+		Clima:      climaSvc,
+		Noticias:   noticiasSvc,
+		Radio:      radioSvc,
+		Traducir:   traducirSvc,
+		YouTube:    youtubeSvc,
 		Version:    version,
 		AdminToken: strings.TrimSpace(adminToken),
 	}
@@ -96,6 +111,29 @@ func Register(mux *http.ServeMux, version string, authSvc *auth.Service, searchS
 	// TTS (Text-to-Speech) — Gemini 2.5 Flash Preview TTS, voz Aoede
 	// POST /api/tts  body: {"text":"..."} → audio/wav
 	mux.HandleFunc("POST /api/tts", rateWrap(logWrap(wrap(h.PostTTS))))
+
+	// ── Clima — Open-Meteo, sin API key ──────────────────────────────────────
+	mux.HandleFunc("GET /api/clima/cities", chain(h.GetClimaCities))
+	mux.HandleFunc("GET /api/clima", chain(h.GetClima))
+
+	// ── Noticias — RSS agregador, sin API key ─────────────────────────────────
+	mux.HandleFunc("GET /api/noticias/feeds", chain(h.GetNoticiasFeedList))
+	mux.HandleFunc("GET /api/noticias", chain(h.GetNoticias))
+	mux.HandleFunc("GET /api/noticias/", chain(h.GetNoticias)) // /api/noticias/<key>
+
+	// ── Radio — Radio Browser API, sin API key ────────────────────────────────
+	mux.HandleFunc("GET /api/radio/popular", chain(h.GetRadioPopular))
+	mux.HandleFunc("GET /api/radio/search", chain(h.GetRadioSearch))
+	mux.HandleFunc("GET /api/radio/country", chain(h.GetRadioByCountry))
+
+	// ── Traducir — MyMemory API, sin API key obligatoria ─────────────────────
+	mux.HandleFunc("GET /api/traducir/pairs", chain(h.GetTraducirPairs))
+	mux.HandleFunc("POST /api/traducir", rateWrap(logWrap(wrap(h.PostTraducir))))
+
+	// ── YouTube — Invidious + Cobalt, sin API key ─────────────────────────────
+	mux.HandleFunc("GET /api/youtube/search", chain(h.GetYouTubeSearch))
+	mux.HandleFunc("GET /api/youtube/stream", chain(h.GetYouTubeStream))
+	mux.HandleFunc("GET /api/youtube/proxy", h.GetYouTubeProxy) // stream binario — sin brotli
 }
 
 func (h *Handlers) getSearch(w http.ResponseWriter, r *http.Request)      { h.GetSearch(w, r) }

@@ -14,24 +14,34 @@ import (
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/auth"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/cami"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/chat"
+	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/clima"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/feedback"
+	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/noticias"
+	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/radio"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/search"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/tiktok"
+	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/traducir"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/tts"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/validate"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/video"
+	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/youtube"
 )
 
 type Handlers struct {
-	Auth       *auth.Service
-	Search     *search.Service
-	Video      *video.Service
-	Chat       *chat.Service
-	Cami       *cami.Service
-	Feedback   *feedback.Service
-	Access     *access.Service
-	TikTok     *tiktok.Service
-	TTS        *tts.Service
+	Auth      *auth.Service
+	Search    *search.Service
+	Video     *video.Service
+	Chat      *chat.Service
+	Cami      *cami.Service
+	Feedback  *feedback.Service
+	Access    *access.Service
+	TikTok    *tiktok.Service
+	TTS       *tts.Service
+	Clima     *clima.Service
+	Noticias  *noticias.Service
+	Radio     *radio.Service
+	Traducir  *traducir.Service
+	YouTube   *youtube.Service
 	Version    string
 	AdminToken string
 }
@@ -704,6 +714,174 @@ func (h *Handlers) searchCami(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handlers) uploadCami(w http.ResponseWriter, r *http.Request) {
 	h.Cami.HandleUpload(w, r)
+}
+
+// ── Clima handlers ────────────────────────────────────────────────────────────
+
+func (h *Handlers) GetClimaCities(w http.ResponseWriter, r *http.Request) {
+	cities := h.Clima.ListCities()
+	writeJSON(w, http.StatusOK, map[string]interface{}{"cities": cities})
+}
+
+func (h *Handlers) GetClima(w http.ResponseWriter, r *http.Request) {
+	city := strings.TrimSpace(r.URL.Query().Get("city"))
+	if city == "" {
+		city = "La Habana"
+	}
+	data, err := h.Clima.FetchByCityJSON(city)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "clima_error", "message": err.Error()})
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(data)
+}
+
+// ── Noticias handlers ─────────────────────────────────────────────────────────
+
+func (h *Handlers) GetNoticiasFeedList(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]interface{}{"feeds": h.Noticias.ListFeeds()})
+}
+
+func (h *Handlers) GetNoticias(w http.ResponseWriter, r *http.Request) {
+	category := strings.TrimSpace(r.URL.Query().Get("category"))
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	if limit <= 0 {
+		limit = 30
+	}
+	// Si hay key específica en path /api/noticias/<key>
+	path := strings.TrimPrefix(r.URL.Path, "/api/noticias")
+	path = strings.Trim(path, "/")
+	if path != "" {
+		data, err := h.Noticias.FetchFeedJSON(path, limit)
+		if err != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]string{"error": "noticias_error", "message": err.Error()})
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(data)
+		return
+	}
+	data, err := h.Noticias.FetchByCategoryJSON(category, limit)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "noticias_error", "message": err.Error()})
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(data)
+}
+
+// ── Radio handlers ────────────────────────────────────────────────────────────
+
+func (h *Handlers) GetRadioPopular(w http.ResponseWriter, r *http.Request) {
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	cc := strings.TrimSpace(r.URL.Query().Get("cc"))
+	stations, err := h.Radio.Popular(limit, cc)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "radio_error", "message": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"stations": stations, "total": len(stations)})
+}
+
+func (h *Handlers) GetRadioSearch(w http.ResponseWriter, r *http.Request) {
+	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	if q == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad_request", "message": "parámetro 'q' requerido"})
+		return
+	}
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	stations, err := h.Radio.Search(q, limit)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "radio_error", "message": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"stations": stations, "total": len(stations), "query": q})
+}
+
+func (h *Handlers) GetRadioByCountry(w http.ResponseWriter, r *http.Request) {
+	cc := strings.TrimSpace(r.URL.Query().Get("cc"))
+	if cc == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad_request", "message": "parámetro 'cc' requerido (código ISO del país)"})
+		return
+	}
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	stations, err := h.Radio.ByCountry(cc, limit)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "radio_error", "message": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"stations": stations, "total": len(stations), "country_code": cc})
+}
+
+// ── Traducir handlers ─────────────────────────────────────────────────────────
+
+func (h *Handlers) GetTraducirPairs(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]interface{}{"pairs": h.Traducir.SupportedPairs()})
+}
+
+func (h *Handlers) PostTraducir(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Text     string `json:"text"`
+		LangPair string `json:"lang_pair"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad_request", "message": "body JSON inválido"})
+		return
+	}
+	if strings.TrimSpace(body.Text) == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad_request", "message": "campo 'text' requerido"})
+		return
+	}
+	if strings.TrimSpace(body.LangPair) == "" {
+		body.LangPair = "es|en"
+	}
+	result, err := h.Traducir.Translate(body.Text, body.LangPair)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "traducir_error", "message": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
+}
+
+// ── YouTube handlers ──────────────────────────────────────────────────────────
+
+func (h *Handlers) GetYouTubeSearch(w http.ResponseWriter, r *http.Request) {
+	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	if q == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad_request", "message": "parámetro 'q' requerido"})
+		return
+	}
+	max, _ := strconv.Atoi(r.URL.Query().Get("max"))
+	results, err := h.YouTube.Search(q, max)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "youtube_error", "message": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"query": q, "results": results, "total": len(results)})
+}
+
+func (h *Handlers) GetYouTubeStream(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimSpace(r.URL.Query().Get("id"))
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad_request", "message": "parámetro 'id' requerido"})
+		return
+	}
+	si, err := h.YouTube.FetchStream(id)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "youtube_stream_error", "message": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, si)
+}
+
+func (h *Handlers) GetYouTubeProxy(w http.ResponseWriter, r *http.Request) {
+	streamURL := strings.TrimSpace(r.URL.Query().Get("url"))
+	if streamURL == "" {
+		http.Error(w, "parámetro 'url' requerido", http.StatusBadRequest)
+		return
+	}
+	h.YouTube.ProxyStream(w, streamURL)
 }
 
 // PostTTS sintetiza texto a voz usando Gemini TTS y devuelve audio WAV al cliente.
