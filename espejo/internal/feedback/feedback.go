@@ -7,419 +7,353 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"strconv"
+	"path/filepath"
 	"strings"
 	"time"
-
-	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/atlas"
 )
 
-type FeedbackData struct {
-	ID          string                 `json:"id"`
+// FeedbackRequest es la estructura plana que envía el frontend.
+type FeedbackRequest struct {
 	Type        string                 `json:"type"`
-	Category    string                 `json:"category"`
+	Severity    string                 `json:"severity"`
 	Title       string                 `json:"title"`
 	Description string                 `json:"description"`
-	URL         string                 `json:"url"`
-	UserAgent   string                 `json:"userAgent"`
-	Timestamp   string                 `json:"timestamp"`
-	UserID      *string                `json:"userId,omitempty"`
-	Severity    string                 `json:"severity"`
-	Screenshots []string               `json:"screenshots,omitempty"`
-	Logs        *string                `json:"logs,omitempty"`
+	Screenshot  string                 `json:"screenshot,omitempty"`
 	SystemInfo  map[string]interface{} `json:"systemInfo,omitempty"`
 }
 
-type AIAnalysis struct {
-	DetectedIssue     string       `json:"detectedIssue"`
-	RootCause         string       `json:"rootCause"`
-	RecommendedAction string       `json:"recommendedAction"`
-	AutoFix           bool         `json:"autoFix"`
-	CodeChanges       []CodeChange `json:"codeChanges,omitempty"`
-	Priority          int          `json:"priority"`
-	EstimatedTime     string       `json:"estimatedTime"`
+// FeedbackResponse es la respuesta que espera el frontend.
+type FeedbackResponse struct {
+	OK               bool   `json:"ok"`
+	Analysis         string `json:"analysis,omitempty"`
+	EstimatedFixTime string `json:"estimated_fix_time,omitempty"`
+	AutoFix          bool   `json:"auto_fix"`
 }
 
-type CodeChange struct {
-	File    string `json:"file"`
-	Line    int    `json:"line"`
-	OldCode string `json:"oldCode"`
-	NewCode string `json:"newCode"`
-}
-
-type BrainData struct {
-	Source         string       `json:"source"`
-	Feedback       FeedbackData `json:"feedback"`
-	Analysis       AIAnalysis   `json:"analysis"`
-	Timestamp      string       `json:"timestamp"`
-	Action         string       `json:"action"`
-	AutoCorrection bool         `json:"autoCorrection"`
-}
-
-type TelegramReport struct {
-	ChatID    int64  `json:"chat_id"`
-	Text      string `json:"text"`
-	ParseMode string `json:"parse_mode"`
+// EscalationRecord se escribe en disco cuando se detecta un problema de código.
+type EscalationRecord struct {
+	ID          string                 `json:"id"`
+	Timestamp   string                 `json:"timestamp"`
+	Type        string                 `json:"type"`
+	Severity    string                 `json:"severity"`
+	Title       string                 `json:"title"`
+	Description string                 `json:"description"`
+	Analysis    string                 `json:"analysis"`
+	SystemInfo  map[string]interface{} `json:"system_info,omitempty"`
+	Status      string                 `json:"status"`
 }
 
 type Service struct {
-	telegramBotToken string
-	telegramChatID   int64
-	atlasBaseURL     string
+	geminiAPIKey string
+	atlasBaseURL string
+	escalationDir string
 }
 
 func New() *Service {
-	botToken := os.Getenv("TELEGRAM_BOT_TOKEN")
-	chatIDStr := os.Getenv("TELEGRAM_CHAT_ID")
-
-	if botToken == "" {
-		botToken = "YOUR_BOT_TOKEN" // Configurar en producción
+	dir := os.Getenv("FEEDBACK_ESCALATION_DIR")
+	if dir == "" {
+		dir = "data/feedback-escalations"
 	}
-
-	var chatID int64 = 123456789 // Configurar en producción
-	if chatIDStr != "" {
-		if id, err := strconv.ParseInt(chatIDStr, 10, 64); err == nil {
-			chatID = id
-		}
-	}
-
+	_ = os.MkdirAll(dir, 0755)
 	return &Service{
-		telegramBotToken: botToken,
-		telegramChatID:   chatID,
-		atlasBaseURL:     strings.TrimRight(strings.TrimSpace(os.Getenv("ATLAS_BASE_URL")), "/"),
+		geminiAPIKey:  strings.TrimSpace(os.Getenv("GEMINI_API_KEY")),
+		atlasBaseURL:  strings.TrimRight(strings.TrimSpace(os.Getenv("ATLAS_BASE_URL")), "/"),
+		escalationDir: dir,
 	}
 }
 
+// ProcessFeedback es el handler principal del módulo Feedback AI.
 func (s *Service) ProcessFeedback(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	var brainData BrainData
-	if err := json.NewDecoder(r.Body).Decode(&brainData); err != nil {
-		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+	var req FeedbackRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, FeedbackResponse{OK: false, Analysis: "Solicitud inválida."})
+		return
+	}
+	if strings.TrimSpace(req.Title) == "" || strings.TrimSpace(req.Description) == "" {
+		writeJSON(w, http.StatusBadRequest, FeedbackResponse{OK: false, Analysis: "Título y descripción son requeridos."})
 		return
 	}
 
-	log.Printf("🧠 Recibido feedback en RAULI-VISION: %s", brainData.Feedback.Title)
+	log.Printf("📬 Feedback recibido [%s/%s]: %s", req.Type, req.Severity, req.Title)
 
-	analysisResult := brainData.Analysis
-	if analysisResult.DetectedIssue == "" {
-		analysisResult = AIAnalysis{
-			DetectedIssue:     brainData.Feedback.Title,
-			RootCause:         "Pendiente de análisis profundo",
-			RecommendedAction: "Evaluar y decidir en ATLAS",
-			AutoFix:           false,
-			Priority:          s.calculatePriority(brainData.Feedback.Severity),
-			EstimatedTime:     "Pendiente",
-		}
+	// Gemini como IA primaria de atención
+	resp, err := s.analyzeWithGemini(req)
+	if err != nil || !resp.OK {
+		log.Printf("⚠️ Gemini no disponible, usando análisis local: %v", err)
+		resp = s.localFallbackAnalysis(req)
 	}
 
-	decision, err := s.requestAtlasDecision(brainData, analysisResult)
-	if err != nil {
-		log.Printf("⚠️ Atlas decision fallback local: %v", err)
-		decision = &AtlasFeedbackDecision{
-			Decision:              "wait_owner_approval",
-			Status:                "pending_owner_approval",
-			AutoExecute:           false,
-			RequiresOwnerApproval: true,
-			UserMessage:           "ATLAS no respondió en este momento. El caso quedó pendiente para aprobación del Owner.",
-		}
+	// Escalación automática si requiere corrección de código o severidad alta/crítica
+	needsEscalation := !resp.AutoFix && (req.Severity == "critical" || req.Severity == "high" || req.Type == "bug" || req.Type == "error")
+	if needsEscalation {
+		go s.escalate(req, resp.Analysis)
 	}
 
-	if decision.AutoExecute && analysisResult.AutoFix {
-		if err := s.applyAutomaticFixes(&analysisResult); err != nil {
-			log.Printf("⚠️ Error aplicando correcciones: %v", err)
-		} else {
-			log.Printf("✅ Correcciones aplicadas exitosamente")
-		}
-	}
-
-	// Canal principal: Atlas. Telegram directo queda opcional para compatibilidad.
-	if strings.ToLower(strings.TrimSpace(os.Getenv("FEEDBACK_DIRECT_TELEGRAM_ENABLED"))) == "true" {
-		if err := s.sendTelegramReport(brainData, &analysisResult); err != nil {
-			log.Printf("⚠️ Error enviando reporte a Telegram: %v", err)
-		} else {
-			log.Printf("📱 Reporte enviado a Telegram exitosamente")
-		}
-	}
-
-	atlas.Emit("Feedback AI procesado en RAULI-VISION", "med", "rauli-vision.feedback", map[string]interface{}{
-		"feedback_id":  brainData.Feedback.ID,
-		"type":         brainData.Feedback.Type,
-		"severity":     brainData.Feedback.Severity,
-		"title":        brainData.Feedback.Title,
-		"auto_fix":     analysisResult.AutoFix,
-		"atlas_action": decision.Decision,
-		"approval_id":  decision.ApprovalID,
-		"status":       decision.Status,
-	})
-
-	atlasReply := decision.UserMessage
-	if msg := s.requestAtlasCommsReply(brainData, decision); strings.TrimSpace(msg) != "" {
-		atlasReply = msg
-	}
-
-	// Responder al cliente
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"success":    true,
-		"message":    decision.UserMessage,
-		"atlasReply": atlasReply,
-		"analysis":   analysisResult,
-		"decision":   decision.Decision,
-		"status":     decision.Status,
-		"approvalId": decision.ApprovalID,
-		"timestamp":  time.Now().Format(time.RFC3339),
-	})
+	writeJSON(w, http.StatusOK, resp)
 }
 
-type AtlasFeedbackDecision struct {
-	Decision              string `json:"decision"`
-	Status                string `json:"status"`
-	AutoExecute           bool   `json:"auto_execute"`
-	RequiresOwnerApproval bool   `json:"requires_owner_approval"`
-	ApprovalID            string `json:"approval_id"`
-	UserMessage           string `json:"user_message"`
+// analyzeWithGemini usa Gemini Flash como IA primaria para analizar el feedback.
+func (s *Service) analyzeWithGemini(req FeedbackRequest) (FeedbackResponse, error) {
+	if s.geminiAPIKey == "" {
+		return FeedbackResponse{}, fmt.Errorf("GEMINI_API_KEY no configurado")
+	}
+
+	systemPrompt := `Eres el analizador de feedback de RAULI VISION, una plataforma de entretenimiento digital.
+Tu tarea es analizar el feedback del usuario y determinar:
+1. Una respuesta clara y útil para el usuario (max 3 oraciones, en español)
+2. Tiempo estimado de resolución
+3. Si el problema puede resolverse automáticamente sin intervención de código
+
+Responde SIEMPRE en este JSON exacto (sin markdown, sin texto extra):
+{
+  "analysis": "Respuesta clara para el usuario...",
+  "estimated_fix_time": "X minutos/horas/días",
+  "auto_fix": true/false
 }
 
-func (s *Service) requestAtlasDecision(brainData BrainData, analysis AIAnalysis) (*AtlasFeedbackDecision, error) {
-	base := strings.TrimSpace(s.atlasBaseURL)
-	if base == "" {
-		base = "http://127.0.0.1:8791"
+Criterios para auto_fix:
+- true: problemas de configuración, caché, reload, permisos de usuario
+- false: bugs de código, errores de estructura, problemas de backend, crashes`
+
+	userMsg := fmt.Sprintf("Tipo: %s\nSeveridad: %s\nTítulo: %s\nDescripción: %s",
+		req.Type, req.Severity, req.Title, req.Description)
+	if sysInfo, ok := req.SystemInfo["url"].(string); ok && sysInfo != "" {
+		userMsg += "\nURL del problema: " + sysInfo
 	}
+
 	reqBody := map[string]interface{}{
-		"source_app": "rauli-vision",
-		"feedback":   brainData.Feedback,
-		"analysis":   analysis,
+		"system_instruction": map[string]interface{}{
+			"parts": []map[string]string{{"text": systemPrompt}},
+		},
+		"contents": []map[string]interface{}{
+			{"role": "user", "parts": []map[string]string{{"text": userMsg}}},
+		},
+		"generationConfig": map[string]interface{}{
+			"temperature":      0.3,
+			"maxOutputTokens":  1024,
+			"thinkingConfig":   map[string]interface{}{"thinkingBudget": 0},
+		},
 	}
-	bodyBytes, _ := json.Marshal(reqBody)
-	req, err := http.NewRequest("POST", base+"/api/feedback/decide", bytes.NewReader(bodyBytes))
+	bodyJSON, err := json.Marshal(reqBody)
 	if err != nil {
-		return nil, err
+		return FeedbackResponse{}, err
 	}
-	req.Header.Set("Content-Type", "application/json")
-	client := &http.Client{Timeout: 20 * time.Second}
-	resp, err := client.Do(req)
+
+	apiURL := fmt.Sprintf(
+		"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=%s",
+		s.geminiAPIKey,
+	)
+	httpReq, err := http.NewRequest("POST", apiURL, bytes.NewReader(bodyJSON))
 	if err != nil {
-		return nil, err
+		return FeedbackResponse{}, err
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("atlas feedback decide status=%d", resp.StatusCode)
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 25 * time.Second}
+	httpResp, err := client.Do(httpReq)
+	if err != nil {
+		return FeedbackResponse{}, err
 	}
-	var out struct {
-		OK bool `json:"ok"`
-		AtlasFeedbackDecision
+	defer httpResp.Body.Close()
+
+	if httpResp.StatusCode != http.StatusOK {
+		return FeedbackResponse{}, fmt.Errorf("gemini status=%d", httpResp.StatusCode)
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		return nil, err
+
+	var gemResp struct {
+		Candidates []struct {
+			Content struct {
+				Parts []struct {
+					Text string `json:"text"`
+				} `json:"parts"`
+			} `json:"content"`
+		} `json:"candidates"`
 	}
-	if !out.OK {
-		return nil, fmt.Errorf("atlas decision not ok")
+	if err := json.NewDecoder(httpResp.Body).Decode(&gemResp); err != nil {
+		return FeedbackResponse{}, err
 	}
-	return &out.AtlasFeedbackDecision, nil
+	if len(gemResp.Candidates) == 0 || len(gemResp.Candidates[0].Content.Parts) == 0 {
+		return FeedbackResponse{}, fmt.Errorf("gemini: respuesta vacía")
+	}
+
+	raw := strings.TrimSpace(gemResp.Candidates[0].Content.Parts[0].Text)
+
+	// Extraer bloque JSON: buscar primer '{' y último '}'
+	jsonRaw := raw
+	if start := strings.Index(raw, "{"); start >= 0 {
+		if end := strings.LastIndex(raw, "}"); end > start {
+			jsonRaw = raw[start : end+1]
+		}
+	}
+
+	var parsed struct {
+		Analysis         string `json:"analysis"`
+		EstimatedFixTime string `json:"estimated_fix_time"`
+		AutoFix          bool   `json:"auto_fix"`
+	}
+	if err := json.Unmarshal([]byte(jsonRaw), &parsed); err != nil {
+		log.Printf("⚠️ Gemini JSON no parseable: %v | raw[:150]=%s", err, raw[:min(len(raw), 150)])
+		// Usar el texto completo como análisis libre
+		return FeedbackResponse{
+			OK:               true,
+			Analysis:         raw,
+			EstimatedFixTime: "Pendiente de evaluación",
+			AutoFix:          false,
+		}, nil
+	}
+
+	if strings.TrimSpace(parsed.Analysis) == "" {
+		return FeedbackResponse{}, fmt.Errorf("gemini: análisis vacío")
+	}
+
+	log.Printf("✅ Gemini analizó feedback [auto_fix=%v]: %s", parsed.AutoFix, parsed.Analysis[:min(len(parsed.Analysis), 80)])
+	return FeedbackResponse{
+		OK:               true,
+		Analysis:         parsed.Analysis,
+		EstimatedFixTime: parsed.EstimatedFixTime,
+		AutoFix:          parsed.AutoFix,
+	}, nil
 }
 
-func (s *Service) requestAtlasCommsReply(brainData BrainData, decision *AtlasFeedbackDecision) string {
+// localFallbackAnalysis genera una respuesta local cuando Gemini no está disponible.
+func (s *Service) localFallbackAnalysis(req FeedbackRequest) FeedbackResponse {
+	var analysis string
+	var fixTime string
+	autoFix := false
+
+	switch req.Severity {
+	case "critical":
+		analysis = "Tu reporte crítico ha sido recibido y registrado con máxima prioridad. El equipo lo revisará de inmediato."
+		fixTime = "< 2 horas"
+	case "high":
+		analysis = "Reporte registrado con prioridad alta. Revisaremos el problema y te mantendremos informado."
+		fixTime = "2-4 horas"
+	default:
+		switch req.Type {
+		case "suggestion", "improvement":
+			analysis = "Gracias por tu sugerencia. La hemos anotado para considerarla en próximas actualizaciones."
+			fixTime = "Próxima versión"
+			autoFix = false
+		default:
+			analysis = "Tu reporte ha sido recibido y está siendo procesado. Te notificaremos cuando esté resuelto."
+			fixTime = "24 horas"
+		}
+	}
+
+	return FeedbackResponse{
+		OK:               true,
+		Analysis:         analysis,
+		EstimatedFixTime: fixTime,
+		AutoFix:          autoFix,
+	}
+}
+
+// escalate registra en disco y notifica a ATLAS cuando se detecta un problema que requiere corrección.
+func (s *Service) escalate(req FeedbackRequest, analysis string) {
+	id := fmt.Sprintf("esc_%d", time.Now().UnixNano())
+	record := EscalationRecord{
+		ID:          id,
+		Timestamp:   time.Now().UTC().Format(time.RFC3339),
+		Type:        req.Type,
+		Severity:    req.Severity,
+		Title:       req.Title,
+		Description: req.Description,
+		Analysis:    analysis,
+		SystemInfo:  req.SystemInfo,
+		Status:      "pending_specialist_review",
+	}
+
+	// Escribir en disco para revisión posterior
+	fname := filepath.Join(s.escalationDir, id+".json")
+	if data, err := json.MarshalIndent(record, "", "  "); err == nil {
+		if err := os.WriteFile(fname, data, 0644); err == nil {
+			log.Printf("📁 Escalación guardada: %s", fname)
+		}
+	}
+
+	// Notificar a ATLAS si está disponible (sin bloquear)
 	base := strings.TrimSpace(s.atlasBaseURL)
 	if base == "" {
 		base = "http://127.0.0.1:8791"
 	}
+	msg := fmt.Sprintf("[RAULI-VISION ESCALATION] Feedback requiere revisión especialista. ID: %s | Severidad: %s | Título: %s | Descripción: %s | Análisis Gemini: %s",
+		id, req.Severity, req.Title, req.Description, analysis)
+
 	body := map[string]interface{}{
-		"user_id": "vision:owner",
-		"channel": "vision-feedback",
-		"message": fmt.Sprintf("Procesa feedback y responde breve. Titulo: %s. Severidad: %s. Decision: %s. Estado: %s.", brainData.Feedback.Title, brainData.Feedback.Severity, decision.Decision, decision.Status),
+		"user_id": "vision:feedback-bot",
+		"channel": "vision-escalations",
+		"message": msg,
 		"context": map[string]interface{}{
-			"source":      "rauli-vision-feedback",
-			"feedback_id": brainData.Feedback.ID,
-			"type":        brainData.Feedback.Type,
-			"severity":    brainData.Feedback.Severity,
-			"title":       brainData.Feedback.Title,
-			"decision":    decision.Decision,
-			"status":      decision.Status,
+			"source":        "rauli-vision-feedback",
+			"escalation_id": id,
+			"type":          req.Type,
+			"severity":      req.Severity,
+			"auto_fix":      false,
+			"action":        "specialist_review_required",
 		},
 	}
 	payload, _ := json.Marshal(body)
-	req, err := http.NewRequest("POST", base+"/api/comms/atlas/message", bytes.NewReader(payload))
+	httpReq, err := http.NewRequest("POST", base+"/api/comms/atlas/message", bytes.NewReader(payload))
 	if err != nil {
-		return ""
+		log.Printf("⚠️ Escalación ATLAS: no se pudo crear request: %v", err)
+		return
 	}
-	req.Header.Set("Content-Type", "application/json")
-	client := &http.Client{Timeout: 12 * time.Second}
-	resp, err := client.Do(req)
+	httpReq.Header.Set("Content-Type", "application/json")
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(httpReq)
 	if err != nil {
-		return ""
+		log.Printf("⚠️ Escalación ATLAS: no disponible (guardado en disco): %v", err)
+		return
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return ""
-	}
-	var out map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		return ""
-	}
-	return strings.TrimSpace(fmt.Sprintf("%v", out["reply"]))
+	log.Printf("📡 Escalación notificada a ATLAS [status=%d]: %s", resp.StatusCode, id)
 }
 
-func (s *Service) analyzeWithMyBrain(brainData BrainData) (*AIAnalysis, error) {
-	// Conexión directa con mi cerebro para análisis profundo
-	log.Printf("🧠 Conectando con cerebro AI para análisis de: %s", brainData.Feedback.Title)
-
-	// Simulación de procesamiento cerebral avanzado
-	time.Sleep(1 * time.Second)
-
-	analysis := &AIAnalysis{
-		DetectedIssue:     fmt.Sprintf("Análisis cerebral: %s", brainData.Feedback.Title),
-		RootCause:         "Causa raíz identificada mediante procesamiento neural avanzado",
-		RecommendedAction: "Acción correctiva optimizada mediante algoritmos de aprendizaje",
-		AutoFix:           true,
-		CodeChanges: []CodeChange{
-			{
-				File:    brainData.Feedback.SystemInfo["url"].(string),
-				Line:    1,
-				OldCode: "Código original con error",
-				NewCode: "Código corregido automáticamente por IA",
-			},
-		},
-		Priority:      s.calculatePriority(brainData.Feedback.Severity),
-		EstimatedTime: "1-3 minutos",
-	}
-
-	log.Printf("🎯 Análisis cerebral completado: %+v", analysis)
-	return analysis, nil
-}
-
-func (s *Service) applyAutomaticFixes(analysis *AIAnalysis) error {
-	log.Printf("🔧 Aplicando correcciones automáticas...")
-
-	for i, change := range analysis.CodeChanges {
-		log.Printf("  📝 Corrección %d: %s:%d", i+1, change.File, change.Line)
-		log.Printf("    Antes: %s", change.OldCode)
-		log.Printf("    Después: %s", change.NewCode)
-
-		// Aquí se aplicarían las correcciones reales en el sistema
-		// Por ahora solo simulamos el proceso
-		time.Sleep(500 * time.Millisecond)
-	}
-
-	log.Printf("✅ Todas las correcciones aplicadas exitosamente")
-	return nil
-}
-
-func (s *Service) sendTelegramReport(brainData BrainData, analysis *AIAnalysis) error {
-	// Construir mensaje detallado para Telegram
-	message := fmt.Sprintf(`
-🧠 *RAULI-VISION Feedback AI Report*
-
-📅 *Fecha:* %s
-🔗 *Fuente:* %s
-👤 *Usuario:* %s
-🎯 *Tipo:* %s
-🚨 *Severidad:* %s
-
-📝 *Título:* %s
-📄 *Descripción:* %s
-
-🔍 *Análisis AI:*
-• *Problema:* %s
-• *Causa Raíz:* %s
-• *Acción:* %s
-• *Corrección Auto:* %v
-• *Prioridad:* %d
-• *Tiempo:* %s
-
-🌐 *Sistema:*
-• *Browser:* %v
-• *OS:* %v
-• *URL:* %s
-
-✅ *Estado:* Procesado y corregido automáticamente
-		`,
-		brainData.Timestamp,
-		brainData.Source,
-		s.getDisplayUserID(brainData.Feedback.UserID),
-		brainData.Feedback.Type,
-		brainData.Feedback.Severity,
-		brainData.Feedback.Title,
-		brainData.Feedback.Description,
-		analysis.DetectedIssue,
-		analysis.RootCause,
-		analysis.RecommendedAction,
-		analysis.AutoFix,
-		analysis.Priority,
-		analysis.EstimatedTime,
-		brainData.Feedback.SystemInfo["browser"],
-		brainData.Feedback.SystemInfo["os"],
-		brainData.Feedback.URL,
-	)
-
-	// Enviar a Telegram
-	report := TelegramReport{
-		ChatID:    s.telegramChatID,
-		Text:      message,
-		ParseMode: "Markdown",
-	}
-
-	return s.sendToTelegram(report)
-}
-
-func (s *Service) sendToTelegram(report TelegramReport) error {
-	url := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", s.telegramBotToken)
-
-	jsonData, err := json.Marshal(report)
-	if err != nil {
-		return fmt.Errorf("error codificando reporte: %v", err)
-	}
-
-	resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonData))
-	if err != nil {
-		return fmt.Errorf("error enviando a Telegram: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("Telegram respondió con status: %d", resp.StatusCode)
-	}
-
-	log.Printf("📱 Reporte enviado exitosamente a Telegram (Chat ID: %d)", report.ChatID)
-	return nil
-}
-
-func (s *Service) calculatePriority(severity string) int {
-	switch severity {
-	case "critical":
-		return 1
-	case "high":
-		return 2
-	case "medium":
-		return 3
-	case "low":
-		return 4
-	default:
-		return 5
-	}
-}
-
-func (s *Service) getDisplayUserID(userID *string) string {
-	if userID == nil || *userID == "" {
-		return "Anónimo"
-	}
-	return *userID
-}
-
+// HandleFeedbackStats devuelve estadísticas del directorio de escalaciones.
 func (s *Service) HandleFeedbackStats(w http.ResponseWriter, r *http.Request) {
-	// Estadísticas del sistema de feedback
-	stats := map[string]interface{}{
-		"total_processed":     42,
-		"auto_fixed":          38,
-		"manual_required":     4,
-		"avg_resolution_time": "2.3 minutos",
-		"success_rate":        90.5,
-		"last_update":         time.Now().Format(time.RFC3339),
+	entries, err := os.ReadDir(s.escalationDir)
+	total := 0
+	pending := 0
+	if err == nil {
+		for _, e := range entries {
+			if strings.HasSuffix(e.Name(), ".json") {
+				total++
+				// Leer status del archivo
+				data, readErr := os.ReadFile(filepath.Join(s.escalationDir, e.Name()))
+				if readErr == nil {
+					var rec EscalationRecord
+					if json.Unmarshal(data, &rec) == nil && rec.Status == "pending_specialist_review" {
+						pending++
+					}
+				}
+			}
+		}
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(stats)
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"ok":              true,
+		"total":           total,
+		"pending_review":  pending,
+		"gemini_enabled":  s.geminiAPIKey != "",
+		"atlas_connected": s.atlasBaseURL != "",
+		"last_update":     time.Now().Format(time.RFC3339),
+	})
+}
+
+func writeJSON(w http.ResponseWriter, code int, v interface{}) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(code)
+	_ = json.NewEncoder(w).Encode(v)
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
