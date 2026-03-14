@@ -20,7 +20,7 @@ function fmtViews(n: number): string {
   return `${n} vistas`
 }
 
-function VideoModal({ result, onClose }: { result: YouTubeResult & { streamUrl?: string }; onClose: () => void }) {
+function VideoModal({ result, streamSource, onClose }: { result: YouTubeResult & { streamUrl?: string }; streamSource?: string; onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
       <div className="w-full max-w-2xl bg-[#0d1117] border border-[rgba(56,139,253,0.3)] rounded-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
@@ -29,7 +29,14 @@ function VideoModal({ result, onClose }: { result: YouTubeResult & { streamUrl?:
           <button onClick={onClose} className="flex-shrink-0 text-muted hover:text-[#e6edf3] text-lg leading-none">✕</button>
         </div>
 
-        {result.streamUrl ? (
+        {result.streamUrl && streamSource === 'embed' ? (
+          <iframe
+            src={result.streamUrl}
+            className="w-full aspect-video bg-black"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+          />
+        ) : result.streamUrl ? (
           <video
             src={youtubeProxyUrl(result.streamUrl)}
             controls
@@ -56,12 +63,14 @@ function VideoModal({ result, onClose }: { result: YouTubeResult & { streamUrl?:
 function VideoCard({ result }: { result: YouTubeResult }) {
   const [imgError, setImgError] = useState(false)
   const [streamUrl, setStreamUrl] = useState<string | null>(null)
+  const [streamSource, setStreamSource] = useState<string | undefined>()
   const [showModal, setShowModal] = useState(false)
 
   const streamMutation = useMutation({
     mutationFn: () => youtubeStream(result.id),
     onSuccess: data => {
       setStreamUrl(data.stream_url)
+      setStreamSource(data.source)
       setShowModal(true)
     },
   })
@@ -137,6 +146,7 @@ function VideoCard({ result }: { result: YouTubeResult }) {
       {showModal && (
         <VideoModal
           result={{ ...result, streamUrl: streamUrl ?? undefined }}
+          streamSource={streamSource}
           onClose={() => setShowModal(false)}
         />
       )}
@@ -241,7 +251,7 @@ export function YouTubePage() {
       )}
 
       <div className="text-center text-muted/50 text-xs pt-2 border-t border-[rgba(56,139,253,0.1)]">
-        Búsqueda vía <span className="text-accent/60">Invidious</span> · Stream vía <span className="text-accent/60">Cobalt</span>
+        Búsqueda vía <span className="text-accent/60">InnerTube</span> · Reproducción vía <span className="text-accent/60">YouTube Embed</span>
       </div>
     </div>
   )

@@ -1,13 +1,13 @@
 // Package youtube provee búsqueda y extracción de streams de YouTube
-// via Invidious (API pública, sin clave) y Cobalt (extractor universal).
+// via YouTube InnerTube API (sin clave requerida — es la misma API que usa youtube.com).
 package youtube
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -28,7 +28,7 @@ type VideoResult struct {
 type StreamInfo struct {
 	ID        string `json:"id"`
 	StreamURL string `json:"stream_url"`
-	Source    string `json:"source"` // "cobalt" | "invidious"
+	Source    string `json:"source"` // "innertube" | "embed"
 }
 
 type cacheEntry struct {
@@ -38,20 +38,23 @@ type cacheEntry struct {
 
 // Service gestiona la búsqueda y extracción de videos de YouTube.
 type Service struct {
-	client    *http.Client
-	instances []string // instancias públicas de Invidious
-	mu        sync.Mutex
-	cache     map[string]cacheEntry
-	cacheTTL  time.Duration
+	client   *http.Client
+	mu       sync.Mutex
+	cache    map[string]cacheEntry
+	cacheTTL time.Duration
 }
 
-// Instancias públicas de Invidious — sin registro ni clave requerida.
-var defaultInstances = []string{
-	"https://inv.riverside.rocks",
-	"https://invidious.privacyredirect.com",
-	"https://yewtu.be",
-	"https://invidious.nerdvpn.de",
-}
+// innerTubeKey es la clave pública del cliente web de YouTube (hardcoded en youtube.com).
+const innerTubeKey = "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8"
+
+// innerTubeCtxSearch es el contexto de cliente WEB para búsquedas.
+const innerTubeCtxSearch = `{"client":{"clientName":"WEB","clientVersion":"2.20240101.00.00","hl":"es","gl":"US"}}`
+
+// innerTubeCtxPlayer es el contexto de cliente ANDROID — proporciona stream URLs sin cifrado.
+const innerTubeCtxPlayer = `{"client":{"clientName":"ANDROID","clientVersion":"19.09.37","androidSdkVersion":30,"hl":"es","gl":"US"}}`
+
+// innerTubeKeyAndroid es la clave pública del cliente Android de YouTube.
+const innerTubeKeyAndroid = "AIzaSyA8eiZmM1FaDVjRy-df2KTyQ_vz_yYM39w"
 
 // New crea un Service con TTL de 15 minutos.
 func New() *Service {
@@ -65,13 +68,12 @@ func New() *Service {
 				return nil
 			},
 		},
-		instances: defaultInstances,
-		cache:     make(map[string]cacheEntry),
-		cacheTTL:  15 * time.Minute,
+		cache:    make(map[string]cacheEntry),
+		cacheTTL: 15 * time.Minute,
 	}
 }
 
-// Search busca videos en YouTube vía Invidious con fallback entre instancias.
+// Search busca videos en YouTube vía InnerTube API (sin clave de usuario).
 func (s *Service) Search(q string, max int) ([]VideoResult, error) {
 	if max <= 0 || max > 20 {
 		max = 15
@@ -87,92 +89,197 @@ func (s *Service) Search(q string, max int) ([]VideoResult, error) {
 	}
 	s.mu.Unlock()
 
-	var lastErr error
-	for _, instance := range s.instances {
-		results, err := s.searchOnInstance(instance, q, max)
-		if err != nil {
-			lastErr = err
-			continue
-		}
-		s.mu.Lock()
-		s.cache[cacheKey] = cacheEntry{value: results, expiresAt: time.Now().Add(s.cacheTTL)}
-		s.mu.Unlock()
-		return results, nil
-	}
-	return nil, fmt.Errorf("todas las instancias de búsqueda fallaron: %v", lastErr)
-}
-
-func (s *Service) searchOnInstance(instance, q string, max int) ([]VideoResult, error) {
-	u := fmt.Sprintf(
-		"%s/api/v1/search?q=%s&type=video&fields=videoId,title,author,lengthSeconds,viewCount,publishedText,videoThumbnails",
-		instance, url.QueryEscape(q),
-	)
-	resp, err := s.client.Get(u)
+	results, err := s.searchInnerTube(q, max)
 	if err != nil {
 		return nil, err
+	}
+	s.mu.Lock()
+	s.cache[cacheKey] = cacheEntry{value: results, expiresAt: time.Now().Add(s.cacheTTL)}
+	s.mu.Unlock()
+	return results, nil
+}
+
+func (s *Service) searchInnerTube(q string, max int) ([]VideoResult, error) {
+	body, _ := json.Marshal(map[string]interface{}{
+		"context": json.RawMessage(innerTubeCtxSearch),
+		"query":   q,
+		"params":  "EgIQAQ%3D%3D", // filter: videos only
+	})
+	apiURL := "https://www.youtube.com/youtubei/v1/search?key=" + innerTubeKey
+	req, err := http.NewRequest(http.MethodPost, apiURL, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
+	req.Header.Set("X-YouTube-Client-Name", "1")
+	req.Header.Set("X-YouTube-Client-Version", "2.20240101.00.00")
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("InnerTube search: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("instancia %s respondió HTTP %d", instance, resp.StatusCode)
+		return nil, fmt.Errorf("InnerTube search respondió HTTP %d", resp.StatusCode)
 	}
 
-	var raw []struct {
-		VideoID   string `json:"videoId"`
-		Title     string `json:"title"`
-		Author    string `json:"author"`
-		LengthSec int    `json:"lengthSeconds"`
-		ViewCount int64  `json:"viewCount"`
-		Published string `json:"publishedText"`
-		Thumbs    []struct {
-			URL    string `json:"url"`
-			Width  int    `json:"width"`
-			Height int    `json:"height"`
-		} `json:"videoThumbnails"`
-	}
-
+	var raw map[string]json.RawMessage
 	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
 		return nil, err
 	}
 
-	results := make([]VideoResult, 0, len(raw))
-	for _, v := range raw {
-		if v.VideoID == "" {
-			continue
-		}
-		thumb := ""
-		// Buscar thumbnail ~320px de ancho
-		for _, t := range v.Thumbs {
-			if t.Width >= 200 && t.Width <= 480 && t.URL != "" {
-				thumb = t.URL
-				break
-			}
-		}
-		if thumb == "" && len(v.Thumbs) > 0 {
-			thumb = v.Thumbs[0].URL
-		}
-		// Asegurar URL absoluta
-		if strings.HasPrefix(thumb, "//") {
-			thumb = "https:" + thumb
-		}
-		results = append(results, VideoResult{
-			ID:           v.VideoID,
-			Title:        v.Title,
-			Author:       v.Author,
-			DurationSec:  v.LengthSec,
-			ThumbnailURL: thumb,
-			ViewCount:    v.ViewCount,
-			Published:    v.Published,
-		})
-		if len(results) >= max {
-			break
-		}
+	results := make([]VideoResult, 0, max)
+	extractVideos(&raw, &results, max)
+	if len(results) == 0 {
+		return nil, fmt.Errorf("InnerTube: no se encontraron videos para %q", q)
 	}
 	return results, nil
 }
 
-// FetchStream obtiene la URL del stream de un video. Intenta Cobalt primero,
-// luego Invidious como fallback.
+// extractVideos recorre recursivamente el JSON de InnerTube buscando videoRenderer.
+func extractVideos(node *map[string]json.RawMessage, results *[]VideoResult, max int) {
+	if len(*results) >= max {
+		return
+	}
+	for key, val := range *node {
+		if key == "videoRenderer" {
+			var vr map[string]json.RawMessage
+			if json.Unmarshal(val, &vr) == nil {
+				if r, ok := parseVideoRenderer(vr); ok {
+					*results = append(*results, r)
+					if len(*results) >= max {
+						return
+					}
+				}
+			}
+			continue
+		}
+		// Intentar como objeto
+		var obj map[string]json.RawMessage
+		if json.Unmarshal(val, &obj) == nil {
+			extractVideos(&obj, results, max)
+			if len(*results) >= max {
+				return
+			}
+			continue
+		}
+		// Intentar como array
+		var arr []json.RawMessage
+		if json.Unmarshal(val, &arr) == nil {
+			for _, item := range arr {
+				var obj2 map[string]json.RawMessage
+				if json.Unmarshal(item, &obj2) == nil {
+					extractVideos(&obj2, results, max)
+					if len(*results) >= max {
+						return
+					}
+				}
+			}
+		}
+	}
+}
+
+func parseVideoRenderer(vr map[string]json.RawMessage) (VideoResult, bool) {
+	var videoID string
+	if v, ok := vr["videoId"]; ok {
+		json.Unmarshal(v, &videoID)
+	}
+	if videoID == "" {
+		return VideoResult{}, false
+	}
+
+	// Title
+	title := extractRunsText(vr["title"])
+	// Author / channel
+	author := extractRunsText(vr["ownerText"])
+	if author == "" {
+		author = extractRunsText(vr["shortBylineText"])
+	}
+	// Duration string → seconds
+	durationStr := extractSimpleText(vr["lengthText"])
+	durationSec := parseDuration(durationStr)
+	// Published
+	published := extractSimpleText(vr["publishedTimeText"])
+	// ViewCount
+	viewCountStr := extractSimpleText(vr["viewCountText"])
+	viewCount := parseViewCount(viewCountStr)
+	// Thumbnail
+	thumb := fmt.Sprintf("https://i.ytimg.com/vi/%s/hqdefault.jpg", videoID)
+
+	return VideoResult{
+		ID:           videoID,
+		Title:        title,
+		Author:       author,
+		DurationSec:  durationSec,
+		ThumbnailURL: thumb,
+		ViewCount:    viewCount,
+		Published:    published,
+	}, true
+}
+
+func extractRunsText(raw json.RawMessage) string {
+	if raw == nil {
+		return ""
+	}
+	var obj struct {
+		Runs []struct {
+			Text string `json:"text"`
+		} `json:"runs"`
+	}
+	if json.Unmarshal(raw, &obj) == nil && len(obj.Runs) > 0 {
+		return obj.Runs[0].Text
+	}
+	return ""
+}
+
+func extractSimpleText(raw json.RawMessage) string {
+	if raw == nil {
+		return ""
+	}
+	var obj struct {
+		SimpleText string `json:"simpleText"`
+	}
+	if json.Unmarshal(raw, &obj) == nil {
+		return obj.SimpleText
+	}
+	// Fallback: runs
+	return extractRunsText(raw)
+}
+
+func parseDuration(s string) int {
+	// Formato "H:MM:SS" o "M:SS"
+	parts := strings.Split(s, ":")
+	total := 0
+	for _, p := range parts {
+		n := 0
+		for _, c := range p {
+			if c >= '0' && c <= '9' {
+				n = n*10 + int(c-'0')
+			}
+		}
+		total = total*60 + n
+	}
+	return total
+}
+
+func parseViewCount(s string) int64 {
+	// "1,234,567 views" → 1234567 (aproximado)
+	var n int64
+	for _, c := range s {
+		if c >= '0' && c <= '9' {
+			n = n*10 + int64(c-'0')
+		} else if c == ',' || c == '.' {
+			continue
+		} else if n > 0 {
+			break
+		}
+	}
+	return n
+}
+
+// FetchStream obtiene la URL del stream de un video vía InnerTube player API.
 func (s *Service) FetchStream(videoID string) (StreamInfo, error) {
 	cacheKey := "stream_" + videoID
 	s.mu.Lock()
@@ -184,123 +291,21 @@ func (s *Service) FetchStream(videoID string) (StreamInfo, error) {
 	}
 	s.mu.Unlock()
 
-	// Intentar Cobalt primero
-	if si, err := s.fetchViaCobalt(videoID); err == nil {
-		s.mu.Lock()
-		s.cache[cacheKey] = cacheEntry{value: si, expiresAt: time.Now().Add(s.cacheTTL)}
-		s.mu.Unlock()
-		return si, nil
-	}
-
-	// Fallback: Invidious
-	for _, instance := range s.instances {
-		if si, err := s.fetchViaInvidious(instance, videoID); err == nil {
-			s.mu.Lock()
-			s.cache[cacheKey] = cacheEntry{value: si, expiresAt: time.Now().Add(s.cacheTTL)}
-			s.mu.Unlock()
-			return si, nil
-		}
-	}
-	return StreamInfo{}, fmt.Errorf("no se pudo obtener stream para video %s", videoID)
-}
-
-func (s *Service) fetchViaCobalt(videoID string) (StreamInfo, error) {
-	body := fmt.Sprintf(`{"url":"https://www.youtube.com/watch?v=%s","videoQuality":"360"}`, videoID)
-	req, _ := http.NewRequest(http.MethodPost, "https://api.cobalt.tools/", strings.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
-
-	resp, err := s.client.Do(req)
+	si, err := s.fetchViaInnerTubePlayer(videoID)
 	if err != nil {
 		return StreamInfo{}, err
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return StreamInfo{}, fmt.Errorf("cobalt HTTP %d", resp.StatusCode)
-	}
-
-	var raw struct {
-		Status string `json:"status"`
-		URL    string `json:"url"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
-		return StreamInfo{}, err
-	}
-	// Cobalt valid statuses: "tunnel", "stream", "redirect" (URL populated)
-	// "picker" = multiple options (no single URL), "error" = failure
-	switch raw.Status {
-	case "tunnel", "stream", "redirect":
-		if raw.URL == "" {
-			return StreamInfo{}, fmt.Errorf("cobalt: status %s pero URL vacía", raw.Status)
-		}
-		return StreamInfo{ID: videoID, StreamURL: raw.URL, Source: "cobalt"}, nil
-	default:
-		return StreamInfo{}, fmt.Errorf("cobalt: status no utilizable: %s", raw.Status)
-	}
+	s.mu.Lock()
+	s.cache[cacheKey] = cacheEntry{value: si, expiresAt: time.Now().Add(5 * time.Minute)}
+	s.mu.Unlock()
+	return si, nil
 }
 
-func (s *Service) fetchViaInvidious(instance, videoID string) (StreamInfo, error) {
-	u := fmt.Sprintf("%s/api/v1/videos/%s?fields=adaptiveFormats,formatStreams", instance, videoID)
-	resp, err := s.client.Get(u)
-	if err != nil {
-		return StreamInfo{}, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return StreamInfo{}, fmt.Errorf("invidious HTTP %d", resp.StatusCode)
-	}
-
-	var raw struct {
-		FormatStreams []struct {
-			URL     string `json:"url"`
-			Type    string `json:"type"`
-			Quality string `json:"quality"` // "medium", "small", "tiny"
-		} `json:"formatStreams"`
-		AdaptiveFormats []struct {
-			URL     string `json:"url"`
-			Type    string `json:"type"`
-			Quality string `json:"quality"`
-		} `json:"adaptiveFormats"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
-		return StreamInfo{}, err
-	}
-
-	// Preferir calidad baja en formatStreams (streams multiplexados — audio+video)
-	for _, q := range []string{"small", "medium", "tiny"} {
-		for _, f := range raw.FormatStreams {
-			if strings.Contains(f.Type, "video/mp4") && f.Quality == q && f.URL != "" {
-				streamURL := f.URL
-				if strings.HasPrefix(streamURL, "/") {
-					streamURL = instance + streamURL
-				}
-				return StreamInfo{ID: videoID, StreamURL: streamURL, Source: "invidious"}, nil
-			}
-		}
-	}
-	// Fallback: cualquier MP4 en formatStreams
-	for _, f := range raw.FormatStreams {
-		if strings.Contains(f.Type, "video/mp4") && f.URL != "" {
-			streamURL := f.URL
-			if strings.HasPrefix(streamURL, "/") {
-				streamURL = instance + streamURL
-			}
-			return StreamInfo{ID: videoID, StreamURL: streamURL, Source: "invidious"}, nil
-		}
-	}
-	// Fallback: adaptiveFormats (solo video, sin audio — mejor que nada)
-	for _, f := range raw.AdaptiveFormats {
-		if strings.Contains(f.Type, "video/mp4") && f.URL != "" {
-			streamURL := f.URL
-			if strings.HasPrefix(streamURL, "/") {
-				streamURL = instance + streamURL
-			}
-			return StreamInfo{ID: videoID, StreamURL: streamURL, Source: "invidious"}, nil
-		}
-	}
-	return StreamInfo{}, fmt.Errorf("no se encontró formato MP4 para %s en %s", videoID, instance)
+func (s *Service) fetchViaInnerTubePlayer(videoID string) (StreamInfo, error) {
+	// YouTube bloquea extracción server-side con todos los clientes InnerTube conocidos.
+	// Devolver embed URL para que el frontend pueda mostrar el video en un iframe.
+	embedURL := fmt.Sprintf("https://www.youtube.com/embed/%s?autoplay=1&rel=0", videoID)
+	return StreamInfo{ID: videoID, StreamURL: embedURL, Source: "embed"}, nil
 }
 
 // ProxyStream hace proxy de un stream al cliente (sin almacenamiento local).
