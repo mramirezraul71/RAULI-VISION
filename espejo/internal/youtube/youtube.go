@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"os/exec"
 	"strings"
 	"sync"
 	"time"
@@ -38,10 +40,11 @@ type cacheEntry struct {
 
 // Service gestiona la búsqueda y extracción de videos de YouTube.
 type Service struct {
-	client   *http.Client
-	mu       sync.Mutex
-	cache    map[string]cacheEntry
-	cacheTTL time.Duration
+	client    *http.Client
+	mu        sync.Mutex
+	cache     map[string]cacheEntry
+	cacheTTL  time.Duration
+	ytdlpPath string // ruta a yt-dlp binary; vacío = deshabilitado
 }
 
 // innerTubeKey es la clave pública del cliente web de YouTube (hardcoded en youtube.com).
@@ -57,7 +60,28 @@ const innerTubeCtxPlayer = `{"client":{"clientName":"ANDROID","clientVersion":"1
 const innerTubeKeyAndroid = "AIzaSyA8eiZmM1FaDVjRy-df2KTyQ_vz_yYM39w"
 
 // New crea un Service con TTL de 15 minutos.
+// Detecta yt-dlp automáticamente: primero YTDLP_PATH, luego rutas conocidas.
 func New() *Service {
+	ytdlp := strings.TrimSpace(os.Getenv("YTDLP_PATH"))
+	if ytdlp == "" {
+		// Intentar rutas conocidas en orden de preferencia
+		candidates := []string{
+			`C:\ATLAS_PUSH\venv\Scripts\yt-dlp.exe`,
+			`C:\ATLAS_PUSH\venv\Scripts\yt-dlp`,
+		}
+		for _, c := range candidates {
+			if _, err := os.Stat(c); err == nil {
+				ytdlp = c
+				break
+			}
+		}
+		// Fallback: buscar en PATH
+		if ytdlp == "" {
+			if p, err := exec.LookPath("yt-dlp"); err == nil {
+				ytdlp = p
+			}
+		}
+	}
 	return &Service{
 		client: &http.Client{
 			Timeout: 15 * time.Second,
@@ -68,8 +92,9 @@ func New() *Service {
 				return nil
 			},
 		},
-		cache:    make(map[string]cacheEntry),
-		cacheTTL: 15 * time.Minute,
+		cache:     make(map[string]cacheEntry),
+		cacheTTL:  15 * time.Minute,
+		ytdlpPath: ytdlp,
 	}
 }
 
@@ -302,20 +327,55 @@ func (s *Service) FetchStream(videoID string) (StreamInfo, error) {
 }
 
 func (s *Service) fetchViaInnerTubePlayer(videoID string) (StreamInfo, error) {
-	// YouTube bloquea extracción server-side con todos los clientes InnerTube conocidos.
-	// Devolver embed URL para que el frontend pueda mostrar el video en un iframe.
+	// 1. Intentar yt-dlp para obtener URL directa del CDN (sin depender de YouTube en el cliente)
+	if s.ytdlpPath != "" {
+		if si, err := s.fetchViaYtDlp(videoID); err == nil {
+			return si, nil
+		}
+	}
+	// 2. Fallback: embed iframe (requiere acceso directo a youtube.com desde el cliente)
 	embedURL := fmt.Sprintf("https://www.youtube.com/embed/%s?autoplay=1&rel=0", videoID)
 	return StreamInfo{ID: videoID, StreamURL: embedURL, Source: "embed"}, nil
 }
 
-// ProxyStream hace proxy de un stream al cliente (sin almacenamiento local).
-func (s *Service) ProxyStream(w http.ResponseWriter, streamURL string) {
+// fetchViaYtDlp extrae la URL de stream con yt-dlp y la devuelve para proxy local.
+func (s *Service) fetchViaYtDlp(videoID string) (StreamInfo, error) {
+	cmd := exec.Command(s.ytdlpPath,
+		"-f", "best[height<=480][ext=mp4]/best[ext=mp4]/best",
+		"--get-url",
+		"--no-playlist",
+		"--no-warnings",
+		"--quiet",
+		"https://www.youtube.com/watch?v="+videoID,
+	)
+	out, err := cmd.Output()
+	if err != nil {
+		return StreamInfo{}, fmt.Errorf("yt-dlp: %w", err)
+	}
+	streamURL := strings.TrimSpace(string(out))
+	// yt-dlp puede devolver múltiples líneas (video+audio separados); usar la primera
+	if idx := strings.Index(streamURL, "\n"); idx > 0 {
+		streamURL = streamURL[:idx]
+	}
+	if streamURL == "" || !strings.HasPrefix(streamURL, "http") {
+		return StreamInfo{}, fmt.Errorf("yt-dlp: URL vacía")
+	}
+	return StreamInfo{ID: videoID, StreamURL: streamURL, Source: "proxy"}, nil
+}
+
+// ProxyStream hace proxy de un stream al cliente con soporte de Range requests (seek).
+func (s *Service) ProxyStream(w http.ResponseWriter, r *http.Request, streamURL string) {
 	req, err := http.NewRequest(http.MethodGet, streamURL, nil)
 	if err != nil {
 		http.Error(w, "URL inválida", http.StatusBadRequest)
 		return
 	}
-	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; RauliVision/1.0)")
+	// Reenviar Range para seek/scrubbing
+	if rangeHdr := r.Header.Get("Range"); rangeHdr != "" {
+		req.Header.Set("Range", rangeHdr)
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
+	req.Header.Set("Referer", "https://www.youtube.com/")
 
 	resp, err := s.client.Do(req)
 	if err != nil {
@@ -324,12 +384,14 @@ func (s *Service) ProxyStream(w http.ResponseWriter, streamURL string) {
 	}
 	defer resp.Body.Close()
 
-	for _, h := range []string{"Content-Type", "Content-Length", "Accept-Ranges"} {
+	// Copiar headers relevantes
+	for _, h := range []string{"Content-Type", "Content-Length", "Content-Range", "Accept-Ranges"} {
 		if v := resp.Header.Get(h); v != "" {
 			w.Header().Set(h, v)
 		}
 	}
 	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(resp.StatusCode)
 	io.Copy(w, resp.Body) //nolint: errcheck
 }

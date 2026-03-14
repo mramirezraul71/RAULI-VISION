@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useRegisterSW } from 'virtual:pwa-register/react'
 import { getHealth } from './api/client'
@@ -38,10 +38,27 @@ const TABS: { id: Tab; label: string; shortLabel: string; icon: string }[] = [
   { id: 'access',   label: 'Acceso',      shortLabel: 'Acceso',  icon: '🔐' },
 ]
 
+// Pestañas principales en la barra inferior móvil
+const BOTTOM_TABS: Tab[] = ['search', 'video', 'youtube', 'tiktok', 'chat']
+
 export default function App() {
   const [tab, setTab] = useState<Tab>('search')
+  const [drawerOpen, setDrawerOpen] = useState(false)
   const [checkingUpdate, setCheckingUpdate] = useState(false)
   const registrationRef = useRef<ServiceWorkerRegistration | null>(null)
+
+  // Cerrar drawer con tecla Escape
+  useEffect(() => {
+    if (!drawerOpen) return
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') setDrawerOpen(false) }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [drawerOpen])
+
+  const navigateTo = (t: Tab) => {
+    setTab(t)
+    setDrawerOpen(false)
+  }
 
   const { data: health, isSuccess } = useQuery({
     queryKey: ['health'],
@@ -167,38 +184,120 @@ export default function App() {
           </div>
         </footer>
 
+        {/* ── Drawer lateral izquierdo — solo móvil ───────────────────────── */}
+        {drawerOpen && (
+          <div className="md:hidden fixed inset-0 z-40 flex">
+            {/* Overlay oscuro */}
+            <div
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+              onClick={() => setDrawerOpen(false)}
+            />
+            {/* Panel del drawer */}
+            <aside
+              className="relative z-10 w-72 max-w-[85vw] h-full bg-[rgba(13,17,23,0.98)] border-r border-[rgba(56,139,253,0.25)] flex flex-col shadow-2xl shadow-black/60"
+              style={{ animation: 'slideInLeft 0.22s cubic-bezier(0.22,1,0.36,1)' }}
+            >
+              {/* Cabecera del drawer */}
+              <div className="flex items-center justify-between px-5 py-4 border-b border-[rgba(56,139,253,0.2)]">
+                <div>
+                  <h2 className="text-base font-semibold text-accent tracking-tight">RAULI-VISION</h2>
+                  <p className="text-[10px] text-muted/60 mt-0.5">Todas las secciones</p>
+                </div>
+                <button
+                  onClick={() => setDrawerOpen(false)}
+                  className="w-8 h-8 rounded-lg flex items-center justify-center border border-[rgba(56,139,253,0.2)] text-muted hover:text-[#e6edf3] hover:border-accent/40 transition"
+                  aria-label="Cerrar menú"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Grid de pestañas */}
+              <nav className="flex-1 overflow-y-auto px-4 py-4">
+                <div className="grid grid-cols-3 gap-2.5">
+                  {TABS.map((t) => {
+                    const active = tab === t.id
+                    return (
+                      <button
+                        key={t.id}
+                        onClick={() => navigateTo(t.id)}
+                        className={`flex flex-col items-center justify-center gap-1.5 py-4 px-2 rounded-xl border transition-all active:scale-95 ${
+                          active
+                            ? 'bg-accent/20 border-accent/50 text-accent shadow-lg shadow-accent/10'
+                            : 'bg-[rgba(22,27,34,0.6)] border-[rgba(56,139,253,0.15)] text-muted hover:border-accent/30 hover:text-[#e6edf3] hover:bg-[rgba(56,139,253,0.08)]'
+                        }`}
+                        aria-label={t.label}
+                      >
+                        <span className="text-2xl leading-none">{t.icon}</span>
+                        <span className={`text-[10px] font-medium leading-none text-center ${active ? 'text-accent' : 'text-muted/70'}`}>
+                          {t.shortLabel}
+                        </span>
+                        {active && (
+                          <span className="w-1 h-1 rounded-full bg-accent mt-0.5" />
+                        )}
+                      </button>
+                    )
+                  })}
+                </div>
+              </nav>
+
+              {/* Footer del drawer */}
+              <div className="px-5 py-3 border-t border-[rgba(56,139,253,0.15)]">
+                <p className="text-[9px] text-muted/40 text-center">v{APP_VERSION} · Ing. Raúl Martínez</p>
+              </div>
+            </aside>
+          </div>
+        )}
+
         {/* ── Bottom navigation bar — solo móvil ─────────────────────────── */}
         <nav
-          className="md:hidden fixed bottom-0 left-0 right-0 z-20 border-t border-[rgba(56,139,253,0.3)] bg-[rgba(13,17,23,0.97)] backdrop-blur-md safe-area-bottom"
+          className="md:hidden fixed bottom-0 left-0 right-0 z-30 border-t border-[rgba(56,139,253,0.3)] bg-[rgba(13,17,23,0.97)] backdrop-blur-md"
           style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
         >
-          <div className="flex overflow-x-auto scrollbar-hide">
-            {TABS.map((t) => {
-              const active = tab === t.id
-              return (
-                <button
-                  key={t.id}
-                  onClick={() => setTab(t.id)}
-                  className={`flex-shrink-0 min-w-[56px] flex flex-col items-center justify-center py-2 gap-0.5 relative transition-colors ${
-                    active ? 'text-accent' : 'text-muted/70 active:text-[#e6edf3]'
-                  }`}
-                  aria-label={t.label}
-                >
-                  {active && (
-                    <span className="absolute top-0 inset-x-0 h-0.5 rounded-b-full bg-accent" />
-                  )}
-                  <span
-                    className={`text-base leading-none transition-transform ${active ? 'scale-110' : 'scale-100'}`}
-                    aria-hidden="true"
+          <div className="flex items-stretch">
+            {/* Botón hamburguesa — izquierda */}
+            <button
+              onClick={() => setDrawerOpen(true)}
+              className={`flex flex-col items-center justify-center gap-1 px-4 py-2.5 border-r border-[rgba(56,139,253,0.2)] transition-colors min-w-[56px] ${
+                drawerOpen ? 'text-accent bg-accent/10' : 'text-muted/70 active:text-[#e6edf3]'
+              }`}
+              aria-label="Abrir menú"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+              <span className="text-[8px] font-medium uppercase tracking-wide">Menú</span>
+            </button>
+
+            {/* 5 pestañas principales */}
+            <div className="flex flex-1">
+              {BOTTOM_TABS.map((id) => {
+                const t = TABS.find(x => x.id === id)!
+                const active = tab === id
+                return (
+                  <button
+                    key={id}
+                    onClick={() => navigateTo(id)}
+                    className={`flex-1 flex flex-col items-center justify-center py-2.5 gap-1 relative transition-colors ${
+                      active ? 'text-accent' : 'text-muted/70 active:text-[#e6edf3]'
+                    }`}
+                    aria-label={t.label}
                   >
-                    {t.icon}
-                  </span>
-                  <span className={`text-[8px] font-medium leading-none tracking-wide uppercase ${active ? 'text-accent' : 'text-muted/60'}`}>
-                    {t.shortLabel}
-                  </span>
-                </button>
-              )
-            })}
+                    {active && (
+                      <span className="absolute top-0 inset-x-2 h-0.5 rounded-b-full bg-accent" />
+                    )}
+                    <span className={`text-xl leading-none transition-transform ${active ? 'scale-115' : 'scale-100'}`} aria-hidden="true">
+                      {t.icon}
+                    </span>
+                    <span className={`text-[9px] font-medium leading-none tracking-wide uppercase ${active ? 'text-accent' : 'text-muted/60'}`}>
+                      {t.shortLabel}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
           </div>
         </nav>
 

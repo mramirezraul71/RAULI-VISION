@@ -890,7 +890,7 @@ func (h *Handlers) GetYouTubeProxy(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "parámetro 'url' requerido", http.StatusBadRequest)
 		return
 	}
-	h.YouTube.ProxyStream(w, streamURL)
+	h.YouTube.ProxyStream(w, r, streamURL)
 }
 
 // PostTTS sintetiza texto a voz usando Gemini TTS y devuelve audio WAV al cliente.
