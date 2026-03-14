@@ -51,8 +51,9 @@ type Handlers struct {
 	AdminToken string
 }
 
-func (h *Handlers) GetDigest(w http.ResponseWriter, r *http.Request)         { h.Digest.HandleDigest(w, r) }
-func (h *Handlers) GetDivisas(w http.ResponseWriter, r *http.Request)        { h.Divisas.HandleDivisas(w, r) }
+func (h *Handlers) GetDigest(w http.ResponseWriter, r *http.Request)          { h.Digest.HandleDigest(w, r) }
+func (h *Handlers) GetDigestHistory(w http.ResponseWriter, r *http.Request)   { h.Digest.HandleDigestHistory(w, r) }
+func (h *Handlers) GetDivisas(w http.ResponseWriter, r *http.Request)         { h.Divisas.HandleDivisas(w, r) }
 func (h *Handlers) PostDivisasRefresh(w http.ResponseWriter, r *http.Request) { h.Divisas.HandleDivisasRefresh(w, r) }
 
 func (h *Handlers) PostAuthToken(w http.ResponseWriter, r *http.Request) {

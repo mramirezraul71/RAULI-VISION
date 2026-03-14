@@ -13,6 +13,7 @@ import (
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/digest"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/divisas"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/feedback"
+	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/store"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/middleware"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/noticias"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/owner"
@@ -34,9 +35,20 @@ func Register(mux *http.ServeMux, version string, authSvc *auth.Service, searchS
 	radioSvc    := radio.New()
 	traducirSvc := traducir.New()
 	youtubeSvc  := youtube.New()
-	divisasSvc  := divisas.New()
+	// SQLite store — persiste tasas de cambio + histórico de resúmenes
+	dbPath := os.Getenv("RAULI_DB_PATH")
+	if dbPath == "" {
+		dbPath = "data/rauli.db"
+	}
+	db, dbErr := store.Open(dbPath)
+	if dbErr != nil {
+		// No fatal: los servicios continúan sin persistencia SQLite
+		db = nil
+	}
+
+	divisasSvc  := divisas.New(db)
 	geminiKey   := strings.TrimSpace(os.Getenv("GEMINI_API_KEY"))
-	digestSvc   := digest.New(geminiKey, noticiasSvc, climaSvc)
+	digestSvc   := digest.New(geminiKey, noticiasSvc, climaSvc, db)
 
 	// Inicializar Owner panel (bus de eventos + canal de tareas)
 	ownerSvc := owner.Init(adminToken, geminiKey)
@@ -161,6 +173,7 @@ func Register(mux *http.ServeMux, version string, authSvc *auth.Service, searchS
 
 	// ── Digest — Resumen del día: noticias + clima + Gemini ───────────────────
 	mux.HandleFunc("GET /api/digest", chain(h.GetDigest))
+	mux.HandleFunc("GET /api/digest/history", chain(h.GetDigestHistory))
 
 	// ── Divisas — Tasas informales USD/EUR/MLC en CUP (elToque, caché 4h) ─────
 	mux.HandleFunc("GET /api/divisas", chain(h.GetDivisas))
