@@ -1,1 +1,40 @@
-{"version": 2, "builds": [{"src": "dashboard/package.json", "use": "@vercel/static-build", "config": {"distDir": "dist"}}], "routes": [{"src": "/api/(.*)", "dest": "https://proxy-backend.onrender.com/api/$1", "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"]}, {"src": "/auth/(.*)", "dest": "https://proxy-backend.onrender.com/auth/$1", "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"]}, {"src": "/(.*)", "dest": "/dashboard/$1"}], "env": {"VITE_API_URL": "https://proxy-backend.onrender.com"}, "headers": [{"source": "/api/(.*)", "headers": [{"key": "Access-Control-Allow-Origin", "value": "*"}, {"key": "Access-Control-Allow-Methods", "value": "GET, POST, PUT, DELETE, OPTIONS"}, {"key": "Access-Control-Allow-Headers", "value": "Content-Type, Authorization"}]}, {"source": "/static/(.*)", "headers": [{"key": "Cache-Control", "value": "public, max-age=31536000, immutable"}]}]}
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "dashboard/package.json",
+      "use": "@vercel/static-build",
+      "config": { "distDir": "dist" }
+    }
+  ],
+  "redirects": [
+    {
+      "source": "/api/video/:id/stream",
+      "has": [{ "type": "header", "key": "accept", "value": ".*text/html.*" }],
+      "destination": "/",
+      "permanent": false
+    }
+  ],
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "https://proxy-backend.onrender.com/api/:path*" },
+    { "source": "/auth/:path*", "destination": "https://proxy-backend.onrender.com/auth/:path*" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ],
+  "env": { "VITE_API_URL": "https://proxy-backend.onrender.com" },
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        { "key": "Access-Control-Allow-Origin", "value": "*" },
+        { "key": "Access-Control-Allow-Methods", "value": "GET, POST, PUT, DELETE, OPTIONS" },
+        { "key": "Access-Control-Allow-Headers", "value": "Content-Type, Authorization" }
+      ]
+    },
+    {
+      "source": "/assets/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+      ]
+    }
+  ]
+}

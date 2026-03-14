@@ -356,7 +356,14 @@ func (h *Handlers) GetVideoStream(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not_found", "message": "canal no disponible"})
 		return
 	}
-	// Siempre responder con JSON — nunca hacer 307 redirect porque Cloudflare lo rechaza con 421.
+	// Si la petición viene de un browser (Accept: text/html), redirigir directamente
+	// al stream_url con 302. El redirect 302 al cliente no genera 421 en Cloudflare
+	// (ese problema era exclusivo de 307 en respuestas a fetch() del SPA).
+	if strings.Contains(r.Header.Get("Accept"), "text/html") {
+		http.Redirect(w, r, target, http.StatusFound)
+		return
+	}
+	// API — responder con JSON
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"id":         id,
 		"mode":       map[bool]string{true: "cuba", false: "direct"}[cubaMode],

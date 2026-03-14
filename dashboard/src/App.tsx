@@ -11,6 +11,8 @@ import { AtlasCompanion } from './components/AtlasCompanion'
 import { OwnerPanel } from './components/OwnerPanel'
 import { DivisasWidget } from './components/DivisasWidget'
 import { DigestButton } from './components/DigestButton'
+import { ExchangeWidget } from './components/ExchangeWidget'
+import { DigestPanel } from './components/DigestPanel'
 import { SearchPage } from './pages/SearchPage'
 import { VideoPage } from './pages/VideoPage'
 import { ChatPage } from './pages/ChatPage'
@@ -104,14 +106,9 @@ export default function App() {
               <span className={`text-xs px-2 py-0.5 rounded-full border whitespace-nowrap flex-shrink-0 ${connected ? 'text-success border-success/60' : 'text-muted border-[rgba(56,139,253,0.3)]'}`}>
                 {connected ? '● Conectado' : '○ Local'}
               </span>
-              {/* Divisas widget — desktop */}
-              <div className="hidden md:flex items-center gap-1 pl-2 border-l border-[rgba(56,139,253,0.2)]">
-                <DivisasWidget />
-              </div>
             </div>
-            {/* Desktop: Resumen del Día + botón actualización */}
+            {/* Desktop: botón actualización */}
             <div className="hidden md:flex items-center gap-2 flex-shrink-0">
-              <DigestButton />
               <button
                 type="button"
                 onClick={handleCheckUpdate}
@@ -135,7 +132,7 @@ export default function App() {
                 {checkingUpdate ? (
                   <span className="h-3.5 w-3.5 rounded-full border-2 border-muted border-t-transparent animate-spin inline-block" />
                 ) : (
-                  <svg xmlns="http://www.w3.org/2020/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                   </svg>
                 )}
@@ -164,26 +161,39 @@ export default function App() {
           </div>
         </header>
 
-        {/* Subtítulo — solo desktop */}
-        <div className="hidden md:block max-w-4xl mx-auto px-4 py-2 text-center">
-          <p className="text-muted text-sm">Internet curado · Búsqueda ligera · Video comprimido · IA que resume</p>
-        </div>
+        {/* ── Content wrapper — 2-column on desktop ─────────────────────── */}
+        <div className="max-w-6xl mx-auto px-4 flex gap-6 flex-1 w-full">
 
-        {/* ── Main content ───────────────────────────────────────────────── */}
-        {/* pb-20: espacio para la bottom nav en móvil */}
-        <main className="max-w-4xl mx-auto px-4 py-6 flex-1 w-full pb-20 md:pb-6">
-          {tab === 'search'   && <SearchPage />}
-          {tab === 'video'    && <VideoPage />}
-          {tab === 'tiktok'   && <TikTokPage />}
-          {tab === 'chat'     && <ChatPage />}
-          {tab === 'cami'     && <CamiPage />}
-          {tab === 'access'   && <AccessPage />}
-          {tab === 'youtube'  && <YouTubePage />}
-          {tab === 'radio'    && <RadioPage />}
-          {tab === 'noticias' && <NoticiasPage />}
-          {tab === 'clima'    && <ClimaPage />}
-          {tab === 'traducir' && <TraducirPage />}
-        </main>
+          {/* Left column — main content */}
+          <div className="flex-1 min-w-0 flex flex-col">
+            {/* Subtítulo — solo desktop */}
+            <div className="hidden md:block py-2 text-center">
+              <p className="text-muted text-sm">Internet curado · Búsqueda ligera · Video comprimido · IA que resume</p>
+            </div>
+
+            {/* pb-20: espacio para la bottom nav en móvil */}
+            <main className="py-6 flex-1 w-full pb-20 md:pb-6">
+              {tab === 'search'   && <SearchPage />}
+              {tab === 'video'    && <VideoPage />}
+              {tab === 'tiktok'   && <TikTokPage />}
+              {tab === 'chat'     && <ChatPage />}
+              {tab === 'cami'     && <CamiPage />}
+              {tab === 'access'   && <AccessPage />}
+              {tab === 'youtube'  && <YouTubePage />}
+              {tab === 'radio'    && <RadioPage />}
+              {tab === 'noticias' && <NoticiasPage />}
+              {tab === 'clima'    && <ClimaPage />}
+              {tab === 'traducir' && <TraducirPage />}
+            </main>
+          </div>
+
+          {/* Right sidebar — desktop only */}
+          <aside className="hidden md:flex flex-col w-64 shrink-0 gap-4 py-4">
+            <ExchangeWidget />
+            <DigestPanel />
+          </aside>
+
+        </div>
 
         {/* ── Footer — solo desktop ───────────────────────────────────────── */}
         <footer className="hidden md:block border-t border-[rgba(56,139,253,0.2)] py-4 text-center text-muted text-xs space-y-1">
