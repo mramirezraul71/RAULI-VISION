@@ -340,15 +340,12 @@ func (h *Handlers) GetVideoStream(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not_found", "message": "canal no disponible"})
 		return
 	}
-	if strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("format")), "json") {
-		writeJSON(w, http.StatusOK, map[string]interface{}{
-			"id":         id,
-			"mode":       map[bool]string{true: "cuba", false: "direct"}[cubaMode],
-			"stream_url": target,
-		})
-		return
-	}
-	http.Redirect(w, r, target, http.StatusTemporaryRedirect)
+	// Siempre responder con JSON — nunca hacer 307 redirect porque Cloudflare lo rechaza con 421.
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"id":         id,
+		"mode":       map[bool]string{true: "cuba", false: "direct"}[cubaMode],
+		"stream_url": target,
+	})
 }
 
 // GetVideoHLSProxy proxies HLS content (m3u8 playlists and TS/media segments)
