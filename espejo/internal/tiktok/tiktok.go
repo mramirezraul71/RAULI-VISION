@@ -46,6 +46,7 @@ type Service struct {
 	trendMu      sync.RWMutex
 	trendItems   []FeedItem
 	trendRefresh time.Time
+	trendRegion  int // índice rotativo de región para variedad
 	bc           *trendBroadcaster
 }
 
@@ -103,27 +104,34 @@ func (s *Service) trendRefreshLoop() {
 	time.Sleep(3 * time.Second)
 	s.doTrendRefresh()
 
-	ticker := time.NewTicker(5 * time.Minute)
+	ticker := time.NewTicker(3 * time.Minute)
 	defer ticker.Stop()
 	for range ticker.C {
 		s.doTrendRefresh()
 	}
 }
 
+// trendRegions rota para maximizar variedad entre refreshes (tikwm devuelve feeds distintos por región).
+var trendRegions = []string{"US", "MX", "AR", "ES", "CO"}
+
 func (s *Service) doTrendRefresh() {
+	s.trendMu.Lock()
+	region := trendRegions[s.trendRegion%len(trendRegions)]
+	s.trendRegion++
+	s.trendMu.Unlock()
+
 	var items []FeedItem
 	var err error
 	// Hasta 3 intentos con backoff: 0s, 10s, 30s
 	delays := []time.Duration{0, 10 * time.Second, 30 * time.Second}
-	for i, d := range delays {
+	for _, d := range delays {
 		if d > 0 {
 			time.Sleep(d)
 		}
-		items, _, _, err = s.FetchTrending(20, "")
+		items, _, _, err = s.fetchTrendingRegion(20, region)
 		if err == nil && len(items) > 0 {
 			break
 		}
-		_ = i // intento fallido, continuar
 	}
 	if len(items) == 0 {
 		return
@@ -133,6 +141,38 @@ func (s *Service) doTrendRefresh() {
 	s.trendRefresh = time.Now()
 	s.trendMu.Unlock()
 	s.bc.send(items)
+}
+
+// fetchTrendingRegion obtiene el feed para una región específica.
+func (s *Service) fetchTrendingRegion(count int, region string) ([]FeedItem, string, bool, error) {
+	if count <= 0 || count > 30 {
+		count = 20
+	}
+	if region == "" {
+		region = "US"
+	}
+	apiURL := fmt.Sprintf("https://www.tikwm.com/api/feed/list?count=%d&region=%s", count, region)
+	resp, err := s.client.Get(apiURL)
+	if err != nil {
+		return nil, "", false, fmt.Errorf("tikwm feed inalcanzable: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var tr tikwmTrendResponse
+	if err := json.NewDecoder(resp.Body).Decode(&tr); err != nil {
+		return nil, "", false, fmt.Errorf("tikwm feed respuesta inválida: %w", err)
+	}
+	if tr.Code != 0 {
+		return nil, "", false, fmt.Errorf("tikwm feed error: %s", tr.Msg)
+	}
+
+	items := make([]FeedItem, 0, len(tr.Data))
+	for _, v := range tr.Data {
+		if item, ok := tikwmItemToFeed(v); ok {
+			items = append(items, item)
+		}
+	}
+	return items, "", false, nil
 }
 
 // TrendingCached devuelve los últimos items de tendencias cacheados.
