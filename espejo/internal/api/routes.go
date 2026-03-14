@@ -10,6 +10,8 @@ import (
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/cami"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/chat"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/clima"
+	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/digest"
+	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/divisas"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/feedback"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/middleware"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/noticias"
@@ -32,9 +34,12 @@ func Register(mux *http.ServeMux, version string, authSvc *auth.Service, searchS
 	radioSvc    := radio.New()
 	traducirSvc := traducir.New()
 	youtubeSvc  := youtube.New()
+	divisasSvc  := divisas.New()
+	geminiKey   := strings.TrimSpace(os.Getenv("GEMINI_API_KEY"))
+	digestSvc   := digest.New(geminiKey, noticiasSvc, climaSvc)
 
 	// Inicializar Owner panel (bus de eventos + canal de tareas)
-	ownerSvc := owner.Init(adminToken, strings.TrimSpace(os.Getenv("GEMINI_API_KEY")))
+	ownerSvc := owner.Init(adminToken, geminiKey)
 
 	h := &Handlers{
 		Auth:       authSvc,
@@ -51,6 +56,8 @@ func Register(mux *http.ServeMux, version string, authSvc *auth.Service, searchS
 		Radio:      radioSvc,
 		Traducir:   traducirSvc,
 		YouTube:    youtubeSvc,
+		Digest:     digestSvc,
+		Divisas:    divisasSvc,
 		Version:    version,
 		AdminToken: strings.TrimSpace(adminToken),
 	}
@@ -151,6 +158,13 @@ func Register(mux *http.ServeMux, version string, authSvc *auth.Service, searchS
 	mux.HandleFunc("GET /api/owner/activity", logWrap(ownerSvc.ServeActivity)) // SSE sin brotli
 	mux.HandleFunc("GET /api/owner/recent",   logWrap(wrap(ownerSvc.ServeRecent)))
 	mux.HandleFunc("POST /api/owner/task",    rateWrap(logWrap(wrap(ownerSvc.ServeTask))))
+
+	// ── Digest — Resumen del día: noticias + clima + Gemini ───────────────────
+	mux.HandleFunc("GET /api/digest", chain(h.GetDigest))
+
+	// ── Divisas — Tasas informales USD/EUR/MLC en CUP (elToque, caché 4h) ─────
+	mux.HandleFunc("GET /api/divisas", chain(h.GetDivisas))
+	mux.HandleFunc("POST /api/divisas/refresh", rateWrap(logWrap(wrap(h.PostDivisasRefresh))))
 }
 
 func (h *Handlers) getSearch(w http.ResponseWriter, r *http.Request)      { h.GetSearch(w, r) }

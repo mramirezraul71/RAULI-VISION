@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { youtubeSearch, youtubeStream, youtubeProxyUrl, type YouTubeResult } from '../api/client'
 
@@ -21,6 +21,7 @@ function fmtViews(n: number): string {
 }
 
 function VideoModal({ result, streamSource, onClose }: { result: YouTubeResult & { streamUrl?: string }; streamSource?: string; onClose: () => void }) {
+  const videoRef = useRef<HTMLVideoElement>(null)
   return (
     <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
       <div className="w-full max-w-2xl bg-[#0d1117] border border-[rgba(56,139,253,0.3)] rounded-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
@@ -37,12 +38,33 @@ function VideoModal({ result, streamSource, onClose }: { result: YouTubeResult &
             allowFullScreen
           />
         ) : result.streamUrl ? (
-          <video
-            src={youtubeProxyUrl(result.streamUrl)}
-            controls
-            autoPlay
-            className="w-full aspect-video bg-black"
-          />
+          <div className="relative">
+            <video
+              ref={videoRef}
+              src={youtubeProxyUrl(result.streamUrl)}
+              controls
+              autoPlay
+              className="w-full aspect-video bg-black"
+            />
+            {typeof document !== 'undefined' && document.pictureInPictureEnabled && (
+              <button
+                title="Picture in Picture"
+                onClick={() => {
+                  const v = videoRef.current
+                  if (!v) return
+                  if (document.pictureInPictureElement === v) document.exitPictureInPicture()
+                  else v.requestPictureInPicture().catch(() => {})
+                }}
+                className="absolute top-2 right-2 z-10 bg-black/60 hover:bg-black/80 text-white text-xs px-2 py-1 rounded-lg border border-white/20 transition flex items-center gap-1"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <rect x="2" y="7" width="14" height="10" rx="1.5" strokeWidth={2} />
+                  <rect x="12" y="13" width="9" height="6" rx="1" fill="currentColor" stroke="none" opacity="0.8" />
+                </svg>
+                PiP
+              </button>
+            )}
+          </div>
         ) : (
           <div className="aspect-video bg-black flex items-center justify-center">
             <div className="text-center text-muted">

@@ -16,6 +16,8 @@ import (
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/cami"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/chat"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/clima"
+	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/digest"
+	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/divisas"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/feedback"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/noticias"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/radio"
@@ -43,9 +45,15 @@ type Handlers struct {
 	Radio     *radio.Service
 	Traducir  *traducir.Service
 	YouTube   *youtube.Service
+	Digest    *digest.Service
+	Divisas   *divisas.Service
 	Version    string
 	AdminToken string
 }
+
+func (h *Handlers) GetDigest(w http.ResponseWriter, r *http.Request)         { h.Digest.HandleDigest(w, r) }
+func (h *Handlers) GetDivisas(w http.ResponseWriter, r *http.Request)        { h.Divisas.HandleDivisas(w, r) }
+func (h *Handlers) PostDivisasRefresh(w http.ResponseWriter, r *http.Request) { h.Divisas.HandleDivisasRefresh(w, r) }
 
 func (h *Handlers) PostAuthToken(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {

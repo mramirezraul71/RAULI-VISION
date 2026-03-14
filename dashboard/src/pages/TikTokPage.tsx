@@ -102,6 +102,7 @@ function InlinePlayer({
   proxyUrl: string
   onClose: () => void
 }) {
+  const videoRef = useRef<HTMLVideoElement>(null)
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
       onClick={onClose}>
@@ -114,10 +115,31 @@ function InlinePlayer({
             <span className="h-2 w-2 rounded-full bg-accent animate-pulse flex-shrink-0" />
             <span className="text-accent text-xs font-semibold truncate">{item.title || 'TikTok via espejo'}</span>
           </div>
-          <button onClick={onClose} className="text-muted hover:text-[#e6edf3] text-xl leading-none ml-2 flex-shrink-0">×</button>
+          <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
+            {typeof document !== 'undefined' && document.pictureInPictureEnabled && (
+              <button
+                title="Picture in Picture"
+                onClick={() => {
+                  const v = videoRef.current
+                  if (!v) return
+                  if (document.pictureInPictureElement === v) document.exitPictureInPicture()
+                  else v.requestPictureInPicture().catch(() => {})
+                }}
+                className="bg-[rgba(56,139,253,0.1)] hover:bg-accent/20 text-muted hover:text-accent text-[10px] px-1.5 py-0.5 rounded border border-[rgba(56,139,253,0.2)] transition flex items-center gap-1"
+              >
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <rect x="2" y="7" width="14" height="10" rx="1.5" strokeWidth={2} />
+                  <rect x="12" y="13" width="9" height="6" rx="1" fill="currentColor" stroke="none" opacity="0.8" />
+                </svg>
+                PiP
+              </button>
+            )}
+            <button onClick={onClose} className="text-muted hover:text-[#e6edf3] text-xl leading-none">×</button>
+          </div>
         </div>
 
         <video
+          ref={videoRef}
           src={proxyUrl}
           controls
           autoPlay

@@ -115,6 +115,28 @@ function HLSPlayer({ src, title, fallbackUrl, fallbackYouTubeUrl }: { src: strin
           EN VIVO
         </div>
       )}
+      {/* Botón PiP */}
+      {!error && typeof document !== 'undefined' && document.pictureInPictureEnabled && (
+        <button
+          title="Picture in Picture"
+          onClick={() => {
+            const v = videoRef.current
+            if (!v) return
+            if (document.pictureInPictureElement === v) {
+              document.exitPictureInPicture()
+            } else {
+              v.requestPictureInPicture().catch(() => {})
+            }
+          }}
+          className="absolute top-3 right-3 z-10 bg-black/60 hover:bg-black/80 text-white text-xs px-2 py-1 rounded-lg border border-white/20 transition flex items-center gap-1"
+        >
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <rect x="2" y="7" width="14" height="10" rx="1.5" strokeWidth={2} />
+            <rect x="12" y="13" width="9" height="6" rx="1" fill="currentColor" stroke="none" opacity="0.8" />
+          </svg>
+          <span>PiP</span>
+        </button>
+      )}
     </div>
   )
 }

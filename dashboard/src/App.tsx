@@ -9,6 +9,8 @@ import { NetworkStatus } from './components/NetworkStatus'
 import { FeedbackAI } from './components/FeedbackAI'
 import { AtlasCompanion } from './components/AtlasCompanion'
 import { OwnerPanel } from './components/OwnerPanel'
+import { DivisasWidget } from './components/DivisasWidget'
+import { DigestButton } from './components/DigestButton'
 import { SearchPage } from './pages/SearchPage'
 import { VideoPage } from './pages/VideoPage'
 import { ChatPage } from './pages/ChatPage'
@@ -102,34 +104,43 @@ export default function App() {
               <span className={`text-xs px-2 py-0.5 rounded-full border whitespace-nowrap flex-shrink-0 ${connected ? 'text-success border-success/60' : 'text-muted border-[rgba(56,139,253,0.3)]'}`}>
                 {connected ? '● Conectado' : '○ Local'}
               </span>
+              {/* Divisas widget — desktop */}
+              <div className="hidden md:flex items-center gap-1 pl-2 border-l border-[rgba(56,139,253,0.2)]">
+                <DivisasWidget />
+              </div>
             </div>
-            {/* Desktop: botón actualización */}
-            <button
-              type="button"
-              onClick={handleCheckUpdate}
-              disabled={checkingUpdate}
-              className="hidden md:block flex-shrink-0 text-xs px-2 py-1 rounded-lg border border-[rgba(56,139,253,0.3)] text-muted hover:text-accent hover:border-accent/50 transition disabled:opacity-50 whitespace-nowrap"
-            >
-              {checkingUpdate ? 'Buscando…' : 'Actualizar'}
-            </button>
+            {/* Desktop: Resumen del Día + botón actualización */}
+            <div className="hidden md:flex items-center gap-2 flex-shrink-0">
+              <DigestButton />
+              <button
+                type="button"
+                onClick={handleCheckUpdate}
+                disabled={checkingUpdate}
+                className="text-xs px-2 py-1 rounded-lg border border-[rgba(56,139,253,0.3)] text-muted hover:text-accent hover:border-accent/50 transition disabled:opacity-50 whitespace-nowrap"
+              >
+                {checkingUpdate ? 'Buscando…' : 'Actualizar'}
+              </button>
+            </div>
 
-            {/* Mobile: botón actualización compacto */}
-            <button
-              type="button"
-              onClick={handleCheckUpdate}
-              disabled={checkingUpdate}
-              className="md:hidden flex-shrink-0 text-xs p-1.5 rounded-lg border border-[rgba(56,139,253,0.3)] text-muted hover:text-accent transition disabled:opacity-50"
-              title="Buscar actualización"
-              aria-label="Buscar actualización"
-            >
-              {checkingUpdate ? (
-                <span className="h-3.5 w-3.5 rounded-full border-2 border-muted border-t-transparent animate-spin inline-block" />
-              ) : (
-                <svg xmlns="http://www.w3.org/2020/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-              )}
-            </button>
+            {/* Mobile: acciones compactas */}
+            <div className="md:hidden flex items-center gap-1.5 flex-shrink-0">
+              <button
+                type="button"
+                onClick={handleCheckUpdate}
+                disabled={checkingUpdate}
+                className="text-xs p-1.5 rounded-lg border border-[rgba(56,139,253,0.3)] text-muted hover:text-accent transition disabled:opacity-50"
+                title="Buscar actualización"
+                aria-label="Buscar actualización"
+              >
+                {checkingUpdate ? (
+                  <span className="h-3.5 w-3.5 rounded-full border-2 border-muted border-t-transparent animate-spin inline-block" />
+                ) : (
+                  <svg xmlns="http://www.w3.org/2020/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                )}
+              </button>
+            </div>
           </div>
 
           {/* Fila inferior: nav de tabs — solo desktop, scrollable */}
@@ -244,8 +255,15 @@ export default function App() {
                 </div>
               </nav>
 
-              {/* Footer del drawer */}
-              <div className="px-5 py-3 border-t border-[rgba(56,139,253,0.15)]">
+              {/* Footer del drawer: divisas + digest + versión */}
+              <div className="px-4 py-3 border-t border-[rgba(56,139,253,0.15)] space-y-2.5">
+                {/* Tasas de cambio */}
+                <div className="flex items-center gap-1 text-[10px] text-muted/60">
+                  <span className="shrink-0">💱</span>
+                  <DivisasWidget />
+                </div>
+                {/* Resumen del día */}
+                <DigestButton />
                 <p className="text-[9px] text-muted/40 text-center">v{APP_VERSION} · Ing. Raúl Martínez</p>
               </div>
             </aside>
