@@ -8,6 +8,7 @@ import { HomeButton } from './components/HomeButton'
 import { NetworkStatus } from './components/NetworkStatus'
 import { FeedbackAI } from './components/FeedbackAI'
 import { AtlasCompanion } from './components/AtlasCompanion'
+import { OwnerPanel } from './components/OwnerPanel'
 import { SearchPage } from './pages/SearchPage'
 import { VideoPage } from './pages/VideoPage'
 import { ChatPage } from './pages/ChatPage'
@@ -312,6 +313,7 @@ export default function App() {
         <NetworkStatus />
         <HomeButton />
         <FeedbackAI />
+        <OwnerPanel />
         <AtlasCompanion />
       </div>
     </ErrorBoundary>

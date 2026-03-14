@@ -12,6 +12,7 @@ import (
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/access"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/atlas"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/auth"
+	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/owner"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/cami"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/chat"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/clima"
@@ -242,6 +243,12 @@ func (h *Handlers) GetSearch(w http.ResponseWriter, r *http.Request) {
 	if max > 50 {
 		max = 50
 	}
+	userID := strings.TrimSpace(r.URL.Query().Get("u"))
+	if userID == "" {
+		userID = "anónimo"
+	}
+	owner.Emit("search", userID, "Buscó: "+q, nil)
+
 	data, err := h.Search.SearchJSON(q, max)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal", "message": err.Error()})
@@ -412,6 +419,18 @@ func (h *Handlers) PostChat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctxURL, _ := validate.ContextURL(body.ContextURL)
+
+	// Emitir evento al Owner monitor
+	userID := strings.TrimSpace(r.URL.Query().Get("u"))
+	if userID == "" {
+		userID = "anónimo"
+	}
+	preview := msg
+	if len(preview) > 80 {
+		preview = preview[:80] + "…"
+	}
+	owner.Emit("chat", userID, preview, map[string]interface{}{"has_context": ctxURL != ""})
+
 	data, err := h.Chat.ChatJSON(msg, ctxURL)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal", "message": err.Error()})

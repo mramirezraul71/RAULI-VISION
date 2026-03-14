@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/owner"
 )
 
 // FeedbackRequest es la estructura plana que envía el frontend.
@@ -80,6 +82,12 @@ func (s *Service) ProcessFeedback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Printf("📬 Feedback recibido [%s/%s]: %s", req.Type, req.Severity, req.Title)
+
+	// Notificar al Owner monitor en tiempo real
+	owner.Emit("feedback", "usuario", req.Title, map[string]interface{}{
+		"type":     req.Type,
+		"severity": req.Severity,
+	}, req.Severity)
 
 	// Gemini como IA primaria de atención
 	resp, err := s.analyzeWithGemini(req)

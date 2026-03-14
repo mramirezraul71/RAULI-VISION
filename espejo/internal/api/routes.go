@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/access"
@@ -12,6 +13,7 @@ import (
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/feedback"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/middleware"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/noticias"
+	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/owner"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/radio"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/search"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/tiktok"
@@ -30,6 +32,9 @@ func Register(mux *http.ServeMux, version string, authSvc *auth.Service, searchS
 	radioSvc    := radio.New()
 	traducirSvc := traducir.New()
 	youtubeSvc  := youtube.New()
+
+	// Inicializar Owner panel (bus de eventos + canal de tareas)
+	ownerSvc := owner.Init(adminToken, strings.TrimSpace(os.Getenv("GEMINI_API_KEY")))
 
 	h := &Handlers{
 		Auth:       authSvc,
@@ -138,6 +143,14 @@ func Register(mux *http.ServeMux, version string, authSvc *auth.Service, searchS
 	// ── HLS proxy — proxifica m3u8 + segmentos para TV en vivo ────────────────
 	// GET /api/video/hls?url=<encoded> → proxy HLS transparente (reescribe URIs internas)
 	mux.HandleFunc("GET /api/video/hls", h.GetVideoHLSProxy) // sin brotli: binario/m3u8
+
+	// ── Owner Panel — monitor de actividad + canal de tareas (requiere X-Admin-Token) ──
+	// GET  /api/owner/activity → SSE stream de eventos de usuarios en tiempo real
+	// GET  /api/owner/recent   → últimos 50 eventos (REST fallback)
+	// POST /api/owner/task     → envía tarea a Gemini, recibe respuesta
+	mux.HandleFunc("GET /api/owner/activity", logWrap(ownerSvc.ServeActivity)) // SSE sin brotli
+	mux.HandleFunc("GET /api/owner/recent",   logWrap(wrap(ownerSvc.ServeRecent)))
+	mux.HandleFunc("POST /api/owner/task",    rateWrap(logWrap(wrap(ownerSvc.ServeTask))))
 }
 
 func (h *Handlers) getSearch(w http.ResponseWriter, r *http.Request)      { h.GetSearch(w, r) }
