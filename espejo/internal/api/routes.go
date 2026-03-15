@@ -22,6 +22,7 @@ import (
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/tiktok"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/traducir"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/tts"
+	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/vault"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/video"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/youtube"
 )
@@ -53,6 +54,10 @@ func Register(mux *http.ServeMux, version string, authSvc *auth.Service, searchS
 	// Inicializar Owner panel (bus de eventos + canal de tareas)
 	ownerSvc := owner.Init(adminToken, geminiKey)
 
+	// Vault — catálogo de contenido offline (2 canales: cami + variado)
+	vaultSvc := vault.New(adminToken)
+	vaultSvc.StartRotationWorker()
+
 	h := &Handlers{
 		Auth:       authSvc,
 		Search:     searchSvc,
@@ -70,6 +75,7 @@ func Register(mux *http.ServeMux, version string, authSvc *auth.Service, searchS
 		YouTube:    youtubeSvc,
 		Digest:     digestSvc,
 		Divisas:    divisasSvc,
+		Vault:      vaultSvc,
 		Version:    version,
 		AdminToken: strings.TrimSpace(adminToken),
 	}
@@ -178,6 +184,20 @@ func Register(mux *http.ServeMux, version string, authSvc *auth.Service, searchS
 	// ── Divisas — Tasas informales USD/EUR/MLC en CUP (elToque, caché 4h) ─────
 	mux.HandleFunc("GET /api/divisas", chain(h.GetDivisas))
 	mux.HandleFunc("POST /api/divisas/refresh", rateWrap(logWrap(wrap(h.PostDivisasRefresh))))
+
+	// ── Vault — catálogo de contenido offline (2 canales: cami | variado) ─────
+	// GET  /api/vault/catalog                → lista items activos (channel, category, genre, q)
+	// GET  /api/vault/stream/{id}            → stream binario con Range requests
+	// POST /api/vault/admin/upload           → subir archivo (X-Admin-Token)
+	// POST /api/vault/admin/rotate           → forzar rotación de slot (X-Admin-Token)
+	// GET  /api/vault/admin/status           → estado del vault (X-Admin-Token)
+	// DELETE /api/vault/admin/item/{id}      → eliminar item (X-Admin-Token)
+	mux.HandleFunc("GET /api/vault/catalog",        chain(h.GetVaultCatalog))
+	mux.HandleFunc("/api/vault/stream/",            h.StreamVaultItem) // sin brotli: binario
+	mux.HandleFunc("POST /api/vault/admin/upload",  rateWrap(logWrap(h.PostVaultUpload)))
+	mux.HandleFunc("POST /api/vault/admin/rotate",  rateWrap(logWrap(h.PostVaultRotate)))
+	mux.HandleFunc("GET /api/vault/admin/status",   rateWrap(logWrap(h.GetVaultStatus)))
+	mux.HandleFunc("DELETE /api/vault/admin/item/", rateWrap(logWrap(h.DeleteVaultItem)))
 }
 
 func (h *Handlers) getSearch(w http.ResponseWriter, r *http.Request)      { h.GetSearch(w, r) }

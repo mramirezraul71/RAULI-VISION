@@ -24,10 +24,11 @@ import { RadioPage } from './pages/RadioPage'
 import { NoticiasPage } from './pages/NoticiasPage'
 import { ClimaPage } from './pages/ClimaPage'
 import { TraducirPage } from './pages/TraducirPage'
+import VaultPage from './pages/VaultPage'
 import { APP_VERSION, CHANGELOG } from './constants/version'
 
 type Tab = 'search' | 'video' | 'tiktok' | 'chat' | 'cami' | 'access'
-         | 'youtube' | 'radio' | 'noticias' | 'clima' | 'traducir'
+         | 'youtube' | 'radio' | 'noticias' | 'clima' | 'traducir' | 'vault'
 
 const TABS: { id: Tab; label: string; shortLabel: string; icon: string }[] = [
   { id: 'search',   label: 'Búsqueda',    shortLabel: 'Buscar',  icon: '🔍' },
@@ -38,6 +39,7 @@ const TABS: { id: Tab; label: string; shortLabel: string; icon: string }[] = [
   { id: 'noticias', label: 'Noticias',    shortLabel: 'Noticias',icon: '📰' },
   { id: 'chat',     label: 'IA',          shortLabel: 'IA',      icon: '💬' },
   { id: 'cami',     label: 'CAMI',        shortLabel: 'CAMI',    icon: '🎵' },
+  { id: 'vault',    label: 'Vault',       shortLabel: 'Vault',   icon: '🎬' },
   { id: 'clima',    label: 'Clima',       shortLabel: 'Clima',   icon: '☀️' },
   { id: 'traducir', label: 'Traducir',    shortLabel: 'Traduc.', icon: '🌐' },
   { id: 'access',   label: 'Acceso',      shortLabel: 'Acceso',  icon: '🔐' },
@@ -178,6 +180,7 @@ export default function App() {
               {tab === 'tiktok'   && <TikTokPage />}
               {tab === 'chat'     && <ChatPage />}
               {tab === 'cami'     && <CamiPage />}
+              {tab === 'vault'    && <VaultPage />}
               {tab === 'access'   && <AccessPage />}
               {tab === 'youtube'  && <YouTubePage />}
               {tab === 'radio'    && <RadioPage />}

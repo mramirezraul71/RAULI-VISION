@@ -11,6 +11,10 @@ services:
     rootDir: espejo
     buildCommand: go mod download && go build -ldflags="-s -w" -o espejo ./cmd/server
     startCommand: ./espejo
+    disk:
+      name: vault-storage
+      mountPath: /var/data/vault
+      sizeGB: 20
     envVars:
       - key: PORT
         value: "8080"
@@ -20,6 +24,10 @@ services:
         generateValue: true
       - key: VERSION
         value: "1.0.0"
+      - key: VAULT_ROOT
+        value: /var/data/vault
+      - key: VAULT_ROTATION_DAYS
+        value: "7"
     healthCheckPath: /api/health
 
   - type: web

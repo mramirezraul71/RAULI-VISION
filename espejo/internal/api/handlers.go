@@ -26,6 +26,7 @@ import (
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/traducir"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/tts"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/validate"
+	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/vault"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/video"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/youtube"
 )
@@ -47,8 +48,30 @@ type Handlers struct {
 	YouTube   *youtube.Service
 	Digest    *digest.Service
 	Divisas   *divisas.Service
+	Vault     *vault.Service
 	Version    string
 	AdminToken string
+}
+
+// ── Vault handlers ────────────────────────────────────────────────────────────
+
+func (h *Handlers) GetVaultCatalog(w http.ResponseWriter, r *http.Request) {
+	h.Vault.HandleCatalog(w, r)
+}
+func (h *Handlers) StreamVaultItem(w http.ResponseWriter, r *http.Request) {
+	h.Vault.HandleStream(w, r)
+}
+func (h *Handlers) PostVaultUpload(w http.ResponseWriter, r *http.Request) {
+	h.Vault.HandleAdminUpload(w, r)
+}
+func (h *Handlers) PostVaultRotate(w http.ResponseWriter, r *http.Request) {
+	h.Vault.HandleAdminRotate(w, r)
+}
+func (h *Handlers) GetVaultStatus(w http.ResponseWriter, r *http.Request) {
+	h.Vault.HandleAdminStatus(w, r)
+}
+func (h *Handlers) DeleteVaultItem(w http.ResponseWriter, r *http.Request) {
+	h.Vault.HandleAdminDelete(w, r)
 }
 
 func (h *Handlers) GetDigest(w http.ResponseWriter, r *http.Request)          { h.Digest.HandleDigest(w, r) }
