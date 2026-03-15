@@ -226,6 +226,12 @@ func (s *Service) ServeTask(w http.ResponseWriter, r *http.Request) {
 
 // ServeRecent devuelve los últimos eventos de actividad (REST fallback).
 func (s *Service) ServeRecent(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Admin-Token, Authorization")
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
 	if !s.checkToken(r) {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return

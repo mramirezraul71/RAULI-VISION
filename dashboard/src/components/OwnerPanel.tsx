@@ -83,11 +83,10 @@ export function OwnerPanel() {
     if (sseRef.current) sseRef.current.close()
     setSseStatus('connecting')
 
-    // Validar token — URL relativa (mismo origen Vercel) + ?token= en query param
-    // Vercel reescribe /api/* → proxy-backend preservando query string
-    // Sin cabeceras custom → sin CORS preflight → browser puede leer status 401
+    // Validar token — ruta /owner/* va directamente a espejo-backend (sin proxy-backend)
+    // Vercel reescribe /owner/:path* → espejo-backend.onrender.com/api/owner/:path*
     try {
-      const check = await fetch(`/api/owner/recent?token=${encodeURIComponent(token)}`)
+      const check = await fetch(`/owner/recent?token=${encodeURIComponent(token)}`)
       if (check.status === 401) {
         setSseStatus('unauthorized')
         return

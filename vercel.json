@@ -16,6 +16,7 @@
     }
   ],
   "rewrites": [
+    { "source": "/owner/:path*", "destination": "https://espejo-backend.onrender.com/api/owner/:path*" },
     { "source": "/api/:path*", "destination": "https://proxy-backend.onrender.com/api/:path*" },
     { "source": "/auth/:path*", "destination": "https://proxy-backend.onrender.com/auth/:path*" },
     { "source": "/(.*)", "destination": "/index.html" }
