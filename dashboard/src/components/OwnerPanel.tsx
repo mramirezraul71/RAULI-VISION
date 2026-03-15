@@ -83,11 +83,10 @@ export function OwnerPanel() {
     if (sseRef.current) sseRef.current.close()
     setSseStatus('connecting')
 
-    // Validar token antes de abrir SSE — distingue 401 de error de red
+    // Validar token antes de abrir SSE — usa API_BASE + ?token= (igual que SSE)
+    // Evita que Vercel trunque cabeceras X-Admin-Token en el rewrite
     try {
-      const check = await fetch('/api/owner/recent', {
-        headers: { 'X-Admin-Token': token },
-      })
+      const check = await fetch(`${API_BASE}/api/owner/recent?token=${encodeURIComponent(token)}`)
       if (check.status === 401) {
         setSseStatus('unauthorized')
         return
