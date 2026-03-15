@@ -8,15 +8,20 @@
  *  - Contador de visitas, último mensaje recordado
  *  - Panel admin embebido para crear usuarios y generar enlaces
  */
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { pingPresence, synthesizeSpeech, getVoiceEnabled, setVoiceEnabled } from '../api/client'
 
 // ── Config ─────────────────────────────────────────────────────────────────
 const ATLAS_API  = 'http://127.0.0.1:8791'
 const TOKEN_KEY  = 'rauli_user_token'
+const AVATAR_POS_KEY = 'rauli_avatar_pos_v1'
+const DRAG_MARGIN = 8
+const AVATAR_DEFAULT_WIDTH = 96
+const AVATAR_DEFAULT_HEIGHT = 132
 
 // ── Tipos ──────────────────────────────────────────────────────────────────
 type CompState = 'idle' | 'speaking' | 'thinking' | 'sleeping'
+type AvatarPosition = { x: number; y: number }
 
 interface UserProfile {
   token:       string
@@ -106,6 +111,41 @@ const MORNING_MSGS = [
 const pick = (arr: (string | (() => string))[]) => {
   const v = arr[Math.floor(Math.random() * arr.length)]
   return typeof v === 'function' ? v() : v
+}
+
+const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
+
+const clampAvatarPosition = (x: number, y: number, width = AVATAR_DEFAULT_WIDTH, height = AVATAR_DEFAULT_HEIGHT): AvatarPosition => {
+  if (typeof window === 'undefined') return { x, y }
+  const maxX = Math.max(DRAG_MARGIN, window.innerWidth - width - DRAG_MARGIN)
+  const maxY = Math.max(DRAG_MARGIN, window.innerHeight - height - DRAG_MARGIN)
+  return {
+    x: clamp(x, DRAG_MARGIN, maxX),
+    y: clamp(y, DRAG_MARGIN, maxY),
+  }
+}
+
+const getDefaultAvatarPosition = (): AvatarPosition => {
+  if (typeof window === 'undefined') return { x: DRAG_MARGIN, y: DRAG_MARGIN }
+  return clampAvatarPosition(
+    window.innerWidth - AVATAR_DEFAULT_WIDTH - 16,
+    window.innerHeight - AVATAR_DEFAULT_HEIGHT - 80,
+  )
+}
+
+const loadAvatarPosition = (): AvatarPosition | null => {
+  if (typeof window === 'undefined') return null
+  const raw = localStorage.getItem(AVATAR_POS_KEY)
+  if (!raw) return null
+  try {
+    const parsed = JSON.parse(raw)
+    if (Number.isFinite(parsed?.x) && Number.isFinite(parsed?.y)) {
+      return clampAvatarPosition(parsed.x, parsed.y)
+    }
+  } catch {
+    // noop: valor inválido en localStorage
+  }
+  return null
 }
 
 // ── CSS ─────────────────────────────────────────────────────────────────────
@@ -471,6 +511,7 @@ export function AtlasCompanion() {
   const [clickCount, setClickCount] = useState(0)
   const [user, setUser]           = useState<UserProfile | null>(null)
   const [showAdmin, setShowAdmin] = useState(false)
+  const [position, setPosition]   = useState<AvatarPosition>(() => loadAvatarPosition() ?? getDefaultAvatarPosition())
 
   const containerRef  = useRef<HTMLDivElement>(null)
   const bubbleTimer   = useRef<ReturnType<typeof setTimeout>>()
@@ -483,9 +524,17 @@ export function AtlasCompanion() {
   const audioRef      = useRef<HTMLAudioElement | null>(null)
   const tokenRef      = useRef<string | null>(null)
   const nameRef       = useRef<string | null>(null)
+  const dragActiveRef = useRef(false)
+  const dragMovedRef  = useRef(false)
+  const dragStartRef  = useRef<AvatarPosition | null>(null)
+  const pointerRef    = useRef<AvatarPosition | null>(null)
+  const skipClickRef  = useRef(false)
 
   useEffect(() => { stateRef.current = state }, [state])
   useEffect(() => { soundRef.current = soundOn }, [soundOn])
+  useEffect(() => {
+    localStorage.setItem(AVATAR_POS_KEY, JSON.stringify(position))
+  }, [position])
 
   // ── Inject CSS ────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -683,7 +732,63 @@ export function AtlasCompanion() {
   }, [])
 
   // ── Click handler ─────────────────────────────────────────────────────────
+  useEffect(() => {
+    const onResize = () => {
+      const rect = containerRef.current?.getBoundingClientRect()
+      const width = rect?.width ?? AVATAR_DEFAULT_WIDTH
+      const height = rect?.height ?? AVATAR_DEFAULT_HEIGHT
+      setPosition(prev => clampAvatarPosition(prev.x, prev.y, width, height))
+    }
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+
+  const endDrag = useCallback(() => {
+    if (!dragActiveRef.current) return
+    dragActiveRef.current = false
+    if (dragMovedRef.current) skipClickRef.current = true
+    dragStartRef.current = null
+    pointerRef.current = null
+  }, [])
+
+  const handleDragMove = useCallback((e: PointerEvent) => {
+    if (!dragActiveRef.current || !dragStartRef.current || !pointerRef.current) return
+    const dx = e.clientX - pointerRef.current.x
+    const dy = e.clientY - pointerRef.current.y
+    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) dragMovedRef.current = true
+    const rect = containerRef.current?.getBoundingClientRect()
+    const width = rect?.width ?? AVATAR_DEFAULT_WIDTH
+    const height = rect?.height ?? AVATAR_DEFAULT_HEIGHT
+    setPosition(clampAvatarPosition(dragStartRef.current.x + dx, dragStartRef.current.y + dy, width, height))
+  }, [])
+
+  useEffect(() => {
+    window.addEventListener('pointermove', handleDragMove)
+    window.addEventListener('pointerup', endDrag)
+    window.addEventListener('pointercancel', endDrag)
+    return () => {
+      window.removeEventListener('pointermove', handleDragMove)
+      window.removeEventListener('pointerup', endDrag)
+      window.removeEventListener('pointercancel', endDrag)
+    }
+  }, [endDrag, handleDragMove])
+
+  const handlePointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return
+    e.preventDefault()
+    e.stopPropagation()
+    dragActiveRef.current = true
+    dragMovedRef.current = false
+    pointerRef.current = { x: e.clientX, y: e.clientY }
+    dragStartRef.current = position
+    e.currentTarget.setPointerCapture?.(e.pointerId)
+  }
+
   const handleClick = () => {
+    if (skipClickRef.current) {
+      skipClickRef.current = false
+      return
+    }
     if (state === 'sleeping') {
       setState('idle')
       say(pick(wakeupMsgs(nameRef.current)), 3500, true)
@@ -702,6 +807,10 @@ export function AtlasCompanion() {
 
   const handleDblClick = (e: React.MouseEvent) => {
     e.preventDefault()
+    if (skipClickRef.current) {
+      skipClickRef.current = false
+      return
+    }
     if (state === 'sleeping') {
       setState('idle')
       say('Mmm... ¡ya desperté!', 3000, true)
@@ -742,8 +851,14 @@ export function AtlasCompanion() {
 
       <div
         ref={containerRef}
-        className="fixed bottom-20 right-4 z-30 select-none"
-        style={{ filter: 'drop-shadow(0 0 14px rgba(57,211,196,0.18))' }}
+        className="fixed z-30 select-none cursor-grab active:cursor-grabbing touch-none"
+        style={{
+          left: position.x,
+          top: position.y,
+          filter: 'drop-shadow(0 0 14px rgba(57,211,196,0.18))',
+          touchAction: 'none',
+        }}
+        onPointerDown={handlePointerDown}
       >
         {/* ── Burbuja de diálogo ── */}
         {bubbleOn && bubble && (
@@ -795,7 +910,8 @@ export function AtlasCompanion() {
         {/* ── Botón silencio ── */}
         <button
           onClick={toggleSound}
-          className="absolute -bottom-1 -left-2 z-10 w-5 h-5 rounded-full bg-[#21262d] border border-[rgba(57,211,196,0.3)] text-[#484f58] hover:text-[#39d3c4] hover:border-[#39d3c4] flex items-center justify-center transition-all"
+          onPointerDown={e => e.stopPropagation()}
+          className="absolute -bottom-1 -left-2 z-10 w-5 h-5 rounded-full bg-[#21262d] border border-[rgba(57,211,196,0.3)] text-[#484f58] hover:text-[#39d3c4] hover:border-[#39d3c4] flex items-center justify-center transition-all cursor-pointer"
           title={soundOn ? 'Silenciar' : 'Activar voz'}
         >
           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -815,7 +931,8 @@ export function AtlasCompanion() {
         {!user && (
           <button
             onClick={e => { e.stopPropagation(); setShowAdmin(true) }}
-            className="absolute -bottom-1 right-0 z-10 w-5 h-5 rounded-full bg-[#21262d] border border-[rgba(57,211,196,0.3)] text-[#484f58] hover:text-[#39d3c4] hover:border-[#39d3c4] flex items-center justify-center transition-all text-[9px]"
+            onPointerDown={e => e.stopPropagation()}
+            className="absolute -bottom-1 right-0 z-10 w-5 h-5 rounded-full bg-[#21262d] border border-[rgba(57,211,196,0.3)] text-[#484f58] hover:text-[#39d3c4] hover:border-[#39d3c4] flex items-center justify-center transition-all text-[9px] cursor-pointer"
             title="Gestión de usuarios"
           >
             ⚙
@@ -824,7 +941,7 @@ export function AtlasCompanion() {
 
         {/* ── Robot ── */}
         <div
-          className="rv-scene cursor-pointer"
+          className="rv-scene"
           onClick={handleClick}
           onDoubleClick={handleDblClick}
           title={state === 'sleeping' ? 'ATLAS duerme — toca para despertar' : 'ATLAS — toca para hablar · doble toque para dormir'}
