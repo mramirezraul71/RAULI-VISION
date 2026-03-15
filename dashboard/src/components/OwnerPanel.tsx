@@ -2,6 +2,23 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useMutation } from '@tanstack/react-query'
 
 const STORAGE_KEY = 'rv_owner_token'
+const ADMIN_STORAGE_KEY = 'rauli_admin_token'
+
+function getStoredToken(): string {
+  const ownerToken = localStorage.getItem(STORAGE_KEY)?.trim()
+  if (ownerToken) return ownerToken
+  return localStorage.getItem(ADMIN_STORAGE_KEY)?.trim() ?? ''
+}
+
+function persistToken(token: string) {
+  localStorage.setItem(STORAGE_KEY, token)
+  localStorage.setItem(ADMIN_STORAGE_KEY, token)
+}
+
+function clearPersistedToken() {
+  localStorage.removeItem(STORAGE_KEY)
+  localStorage.removeItem(ADMIN_STORAGE_KEY)
+}
 
 interface ActivityEvent {
   id: string
@@ -19,6 +36,8 @@ interface TaskResponse {
   model: string
   duration_ms: number
 }
+
+type TokenValidation = 'ok' | 'unauthorized' | 'offline'
 
 const TYPE_META: Record<string, { icon: string; color: string }> = {
   feedback:   { icon: '📬', color: 'text-purple-400' },
@@ -60,9 +79,11 @@ function EventRow({ ev }: { ev: ActivityEvent }) {
 export function OwnerPanel() {
   const [open, setOpen] = useState(false)
   const [tab, setTab] = useState<'monitor' | 'tasks'>('monitor')
-  const [token, setToken] = useState(() => localStorage.getItem(STORAGE_KEY) ?? '')
+  const [token, setToken] = useState(() => getStoredToken())
   const [tokenInput, setTokenInput] = useState('')
   const [authenticated, setAuthenticated] = useState(false)
+  const [authError, setAuthError] = useState<string | null>(null)
+  const [loggingIn, setLoggingIn] = useState(false)
   const [events, setEvents] = useState<ActivityEvent[]>([])
   const [sseStatus, setSseStatus] = useState<'connecting' | 'connected' | 'disconnected' | 'unauthorized'>('disconnected')
   const [taskInput, setTaskInput] = useState('')
@@ -71,10 +92,42 @@ export function OwnerPanel() {
   const tasksEndRef = useRef<HTMLDivElement>(null)
   const sseRef = useRef<EventSource | null>(null)
 
-  // Verificar token guardado al abrir
+  const validateToken = useCallback(async (tokenToCheck: string): Promise<TokenValidation> => {
+    try {
+      const check = await fetch(`/owner/recent?token=${encodeURIComponent(tokenToCheck)}`, { cache: 'no-store' })
+      if (check.status === 401) return 'unauthorized'
+      return check.ok ? 'ok' : 'offline'
+    } catch {
+      return 'offline'
+    }
+  }, [])
+
+  // Verificar token persistido al iniciar
   useEffect(() => {
-    if (token) setAuthenticated(true)
-  }, [token])
+    let cancelled = false
+    const boot = async () => {
+      if (!token) {
+        setAuthenticated(false)
+        return
+      }
+      const result = await validateToken(token)
+      if (cancelled) return
+      if (result === 'ok') {
+        setAuthenticated(true)
+        setAuthError(null)
+      } else if (result === 'unauthorized') {
+        setAuthenticated(false)
+        setToken('')
+        clearPersistedToken()
+      } else {
+        // Mantener sesión local mientras no haya conexión; se revalida al reconectar.
+        setAuthenticated(true)
+        setSseStatus('disconnected')
+      }
+    }
+    void boot()
+    return () => { cancelled = true }
+  }, [token, validateToken])
 
   const connectSSE = useCallback(async () => {
     if (!token || !open || tab !== 'monitor') return
@@ -84,13 +137,20 @@ export function OwnerPanel() {
     // Validar token — ruta /owner/* va directamente a espejo-backend (sin proxy-backend)
     // Vercel reescribe /owner/:path* → espejo-backend.onrender.com/api/owner/:path*
     try {
-      const check = await fetch(`/owner/recent?token=${encodeURIComponent(token)}`)
-      if (check.status === 401) {
+      const check = await validateToken(token)
+      if (check === 'unauthorized') {
         setSseStatus('unauthorized')
+        setAuthError('Token invalido para Panel Owner')
+        return
+      }
+      if (check === 'offline') {
+        setSseStatus('disconnected')
+        setAuthError('Sin conexion para validar token Owner')
         return
       }
     } catch {
-      // Sin red — intentar SSE de todas formas
+      setSseStatus('disconnected')
+      return
     }
 
     const es = new EventSource(`/owner/activity?token=${encodeURIComponent(token)}`)
@@ -111,7 +171,7 @@ export function OwnerPanel() {
       // Reconectar tras 8s (solo si token sigue siendo válido)
       setTimeout(connectSSE, 8000)
     }
-  }, [token, open, tab])
+  }, [token, open, tab, validateToken])
 
   useEffect(() => {
     if (authenticated && open && tab === 'monitor') {
@@ -160,18 +220,34 @@ export function OwnerPanel() {
     },
   })
 
-  const handleLogin = () => {
-    if (!tokenInput.trim()) return
-    setToken(tokenInput.trim())
-    localStorage.setItem(STORAGE_KEY, tokenInput.trim())
-    setAuthenticated(true)
-    setTokenInput('')
+  const handleLogin = async () => {
+    const nextToken = tokenInput.trim()
+    if (!nextToken || loggingIn) return
+    setLoggingIn(true)
+    setAuthError(null)
+    const result = await validateToken(nextToken)
+    if (result === 'ok') {
+      setToken(nextToken)
+      persistToken(nextToken)
+      setAuthenticated(true)
+      setSseStatus('disconnected')
+      setTokenInput('')
+    } else if (result === 'unauthorized') {
+      setAuthenticated(false)
+      setAuthError('Token invalido. Revisa ADMIN_TOKEN en espejo-backend.')
+    } else {
+      setAuthenticated(false)
+      setAuthError('Sin conexion. No se pudo validar el token Owner.')
+    }
+    setLoggingIn(false)
   }
 
   const handleLogout = () => {
     setToken('')
     setAuthenticated(false)
-    localStorage.removeItem(STORAGE_KEY)
+    setAuthError(null)
+    setSseStatus('disconnected')
+    clearPersistedToken()
     sseRef.current?.close()
     setEvents([])
     setTaskHistory([])
@@ -259,17 +335,20 @@ export function OwnerPanel() {
                 type="password"
                 value={tokenInput}
                 onChange={e => setTokenInput(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleLogin()}
+                onKeyDown={e => e.key === 'Enter' && void handleLogin()}
                 placeholder="Token de administración..."
                 className="w-full px-3 py-2 bg-bg border border-[rgba(56,139,253,0.3)] rounded-lg text-sm text-[#e6edf3] placeholder-muted/40 focus:outline-none focus:border-accent/60"
                 autoFocus
               />
+              {authError && (
+                <p className="text-[11px] text-orange-400 text-center">{authError}</p>
+              )}
               <button
-                onClick={handleLogin}
-                disabled={!tokenInput.trim()}
+                onClick={() => void handleLogin()}
+                disabled={!tokenInput.trim() || loggingIn}
                 className="w-full py-2 bg-accent/20 hover:bg-accent/30 border border-accent/40 text-accent rounded-lg text-sm font-medium transition disabled:opacity-50"
               >
-                Entrar
+                {loggingIn ? 'Validando...' : 'Entrar'}
               </button>
             </div>
           ) : (

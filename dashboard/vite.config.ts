@@ -26,5 +26,5 @@ export default defineConfig({
       },
     }),
   ],
-  server: { proxy: { '/api': 'http://localhost:3000', '/auth': 'http://localhost:3000' } },
+  server: { proxy: { '/api': 'http://localhost:3000', '/auth': 'http://localhost:3000', '/owner': 'http://localhost:3000', '/vault': 'http://localhost:3000' } },
 })

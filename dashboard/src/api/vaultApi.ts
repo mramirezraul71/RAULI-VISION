@@ -1,4 +1,38 @@
-const BASE = (import.meta.env.VITE_API_URL ?? '') + '/api/vault'
+const ENV_BASE = (import.meta.env.VITE_API_URL ?? '').replace(/\/+$/, '')
+const PRIMARY_BASE = ENV_BASE ? `${ENV_BASE}/api/vault` : '/api/vault'
+const FALLBACK_BASES = ['/vault', '/api/vault']
+const RETRYABLE_STATUS = new Set([404, 502, 503, 504])
+
+let activeBase = PRIMARY_BASE
+
+function getCandidateBases(): string[] {
+  return Array.from(new Set([activeBase, PRIMARY_BASE, ...FALLBACK_BASES]))
+}
+
+async function requestVault(path: string, init?: RequestInit): Promise<Response> {
+  let lastError: unknown = null
+  let lastResponse: Response | null = null
+
+  for (const base of getCandidateBases()) {
+    try {
+      const res = await fetch(`${base}${path}`, init)
+      if (res.ok) {
+        activeBase = base
+        return res
+      }
+      lastResponse = res
+      if (!RETRYABLE_STATUS.has(res.status)) {
+        return res
+      }
+    } catch (err) {
+      lastError = err
+    }
+  }
+
+  if (lastResponse) return lastResponse
+  if (lastError instanceof Error) throw lastError
+  throw new Error('vault request failed')
+}
 
 export type VaultChannel = 'cami' | 'variado'
 export type VaultCategory = 'pelicula' | 'musica' | 'musicvideo'
@@ -53,17 +87,18 @@ export async function getVaultCatalog(params: VaultCatalogParams = {}): Promise<
   if (params.category) qs.set('category', params.category)
   if (params.genre)    qs.set('genre',    params.genre)
   if (params.q)        qs.set('q',        params.q)
-  const res = await fetch(`${BASE}/catalog?${qs}`)
+  const suffix = qs.toString() ? `/catalog?${qs}` : '/catalog'
+  const res = await requestVault(suffix)
   if (!res.ok) throw new Error(`vault catalog: ${res.status}`)
   return res.json()
 }
 
 export function vaultStreamUrl(id: string): string {
-  return `${BASE}/stream/${id}`
+  return `${activeBase}/stream/${id}`
 }
 
 export async function getVaultStatus(adminToken: string): Promise<VaultStatusResponse> {
-  const res = await fetch(`${BASE}/admin/status`, {
+  const res = await requestVault('/admin/status', {
     headers: { 'X-Admin-Token': adminToken },
   })
   if (!res.ok) throw new Error(`vault status: ${res.status}`)
@@ -71,7 +106,7 @@ export async function getVaultStatus(adminToken: string): Promise<VaultStatusRes
 }
 
 export async function rotateVault(adminToken: string, slot?: RotationSlot): Promise<{ ok: boolean; active_slot: string }> {
-  const res = await fetch(`${BASE}/admin/rotate`, {
+  const res = await requestVault('/admin/rotate', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Admin-Token': adminToken },
     body: JSON.stringify(slot ? { slot } : {}),
@@ -80,7 +115,7 @@ export async function rotateVault(adminToken: string, slot?: RotationSlot): Prom
 }
 
 export async function deleteVaultItem(adminToken: string, id: string): Promise<{ ok: boolean }> {
-  const res = await fetch(`${BASE}/admin/item/${id}`, {
+  const res = await requestVault(`/admin/item/${id}`, {
     method: 'DELETE',
     headers: { 'X-Admin-Token': adminToken },
   })
