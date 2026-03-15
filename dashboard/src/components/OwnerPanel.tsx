@@ -64,7 +64,7 @@ export function OwnerPanel() {
   const [tokenInput, setTokenInput] = useState('')
   const [authenticated, setAuthenticated] = useState(false)
   const [events, setEvents] = useState<ActivityEvent[]>([])
-  const [sseStatus, setSseStatus] = useState<'connecting' | 'connected' | 'disconnected'>('disconnected')
+  const [sseStatus, setSseStatus] = useState<'connecting' | 'connected' | 'disconnected' | 'unauthorized'>('disconnected')
   const [taskInput, setTaskInput] = useState('')
   const [taskHistory, setTaskHistory] = useState<{ role: 'owner' | 'ai'; text: string; ms?: number }[]>([])
   const eventsEndRef = useRef<HTMLDivElement>(null)
@@ -76,10 +76,24 @@ export function OwnerPanel() {
     if (token) setAuthenticated(true)
   }, [token])
 
-  const connectSSE = useCallback(() => {
+  const connectSSE = useCallback(async () => {
     if (!token || !open || tab !== 'monitor') return
     if (sseRef.current) sseRef.current.close()
     setSseStatus('connecting')
+
+    // Validar token antes de abrir SSE — distingue 401 de error de red
+    try {
+      const check = await fetch('/api/owner/recent', {
+        headers: { 'X-Admin-Token': token },
+      })
+      if (check.status === 401) {
+        setSseStatus('unauthorized')
+        return
+      }
+    } catch {
+      // Sin red — intentar SSE de todas formas
+    }
+
     const es = new EventSource(`/api/owner/activity?token=${encodeURIComponent(token)}`)
     sseRef.current = es
     es.addEventListener('activity', (e) => {
@@ -95,8 +109,8 @@ export function OwnerPanel() {
     es.onerror = () => {
       setSseStatus('disconnected')
       es.close()
-      // Reconectar tras 5s
-      setTimeout(connectSSE, 5000)
+      // Reconectar tras 8s (solo si token sigue siendo válido)
+      setTimeout(connectSSE, 8000)
     }
   }, [token, open, tab])
 
@@ -204,11 +218,15 @@ export function OwnerPanel() {
               <span className="text-sm font-semibold text-[#e6edf3]">Panel Owner</span>
               {authenticated && (
                 <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium ${
-                  sseStatus === 'connected'    ? 'bg-emerald-500/20 text-emerald-400' :
-                  sseStatus === 'connecting'   ? 'bg-yellow-500/20 text-yellow-400' :
-                                                 'bg-red-500/20 text-red-400'
+                  sseStatus === 'connected'      ? 'bg-emerald-500/20 text-emerald-400' :
+                  sseStatus === 'connecting'     ? 'bg-yellow-500/20 text-yellow-400' :
+                  sseStatus === 'unauthorized'   ? 'bg-orange-500/20 text-orange-400' :
+                                                   'bg-red-500/20 text-red-400'
                 }`}>
-                  {sseStatus === 'connected' ? '● EN VIVO' : sseStatus === 'connecting' ? '◌ Conectando' : '○ Offline'}
+                  {sseStatus === 'connected'    ? '● EN VIVO'
+                  : sseStatus === 'connecting'  ? '◌ Conectando'
+                  : sseStatus === 'unauthorized'? '⚠ Token inválido'
+                  :                              '○ Offline'}
                 </span>
               )}
             </div>
@@ -277,7 +295,21 @@ export function OwnerPanel() {
               {tab === 'monitor' ? (
                 /* ── Monitor de actividad ── */
                 <div className="flex-1 overflow-y-auto min-h-0">
-                  {events.length === 0 ? (
+                  {sseStatus === 'unauthorized' ? (
+                    <div className="flex flex-col items-center justify-center py-10 gap-3 px-4 text-center">
+                      <span className="text-2xl">🔑</span>
+                      <p className="text-xs text-orange-400 font-medium">Token de administración incorrecto</p>
+                      <p className="text-[10px] text-muted/60 leading-relaxed">
+                        Ve al Dashboard de Render → espejo-backend → Environment → copia el valor de <span className="font-mono text-orange-300">ADMIN_TOKEN</span>
+                      </p>
+                      <button
+                        onClick={handleLogout}
+                        className="text-[10px] px-3 py-1.5 bg-orange-500/10 border border-orange-500/30 text-orange-400 rounded-lg hover:bg-orange-500/20 transition"
+                      >
+                        Cambiar token
+                      </button>
+                    </div>
+                  ) : events.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-10 text-muted/40">
                       <span className="text-2xl mb-2">📡</span>
                       <p className="text-xs">Esperando actividad de usuarios...</p>
