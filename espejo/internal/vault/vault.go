@@ -98,21 +98,22 @@ func New(adminToken string) *Service {
 		}
 	}
 
-	// Abrir SQLite para el catálogo
-	dbPath := filepath.Join(root, "vault.db")
-	db, err := sql.Open("sqlite", dbPath+"?_journal=WAL&_busy_timeout=5000")
-	if err != nil {
-		log.Printf("⚠️  Vault: no se pudo abrir SQLite %s: %v (modo sin persistencia)", dbPath, err)
-		return svc
+	// Abrir SQLite para el catálogo (con fallback a directorio local si el configurado falla)
+	svc.db = openVaultDB(svc, root)
+	if svc.db == nil && root != "storage/vault" {
+		log.Printf("⚠️  Vault: %s no disponible, usando fallback local storage/vault", root)
+		fallbackRoot := "storage/vault"
+		for _, ch := range []string{"cami", "variado"} {
+			for _, cat := range []string{"peliculas", "musica", "musicvideos"} {
+				_ = os.MkdirAll(filepath.Join(fallbackRoot, ch, cat), 0755)
+			}
+		}
+		svc.vaultRoot = fallbackRoot
+		svc.db = openVaultDB(svc, fallbackRoot)
 	}
-	db.SetMaxOpenConns(1)
-	if err := migrate(db); err != nil {
-		log.Printf("⚠️  Vault: migración fallida: %v", err)
-		db.Close()
-		return svc
+	if svc.db != nil {
+		log.Printf("🎬 Vault inicializado: root=%s rotación=%dd", svc.vaultRoot, days)
 	}
-	svc.db = db
-	log.Printf("🎬 Vault inicializado: root=%s rotación=%dd", root, days)
 	return svc
 }
 
@@ -164,7 +165,8 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 // Query params: channel=cami|variado, category=pelicula|musica|musicvideo, genre=..., q=busqueda
 func (s *Service) HandleCatalog(w http.ResponseWriter, r *http.Request) {
 	if s.db == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"ok": false, "error": "vault no disponible"})
+		// Vault no inicializado (disco no montado): devolver catálogo vacío — no es error de red
+		writeJSON(w, http.StatusOK, CatalogResponse{OK: true, Items: []Item{}, Total: 0})
 		return
 	}
 	ch := r.URL.Query().Get("channel")
@@ -527,6 +529,22 @@ func (s *Service) applyRotation(slot string) error {
 		return err
 	}
 	return tx.Commit()
+}
+
+func openVaultDB(_ *Service, root string) *sql.DB {
+	dbPath := filepath.Join(root, "vault.db")
+	db, err := sql.Open("sqlite", dbPath+"?_journal=WAL&_busy_timeout=5000")
+	if err != nil {
+		log.Printf("⚠️  Vault: no se pudo abrir SQLite %s: %v", dbPath, err)
+		return nil
+	}
+	db.SetMaxOpenConns(1)
+	if err := migrate(db); err != nil {
+		log.Printf("⚠️  Vault: migración fallida en %s: %v", dbPath, err)
+		db.Close()
+		return nil
+	}
+	return db
 }
 
 // helpers ─────────────────────────────────────────────────────────────────────
