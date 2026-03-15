@@ -39,14 +39,14 @@ const TABS: { id: Tab; label: string; shortLabel: string; icon: string }[] = [
   { id: 'noticias', label: 'Noticias',    shortLabel: 'Noticias',icon: '📰' },
   { id: 'chat',     label: 'IA',          shortLabel: 'IA',      icon: '💬' },
   { id: 'cami',     label: 'CAMI',        shortLabel: 'CAMI',    icon: '🎵' },
-  { id: 'vault',    label: 'Vault',       shortLabel: 'Vault',   icon: '🎬' },
+  { id: 'vault',    label: 'Vault',       shortLabel: 'Vault',   icon: '📦' },
   { id: 'clima',    label: 'Clima',       shortLabel: 'Clima',   icon: '☀️' },
   { id: 'traducir', label: 'Traducir',    shortLabel: 'Traduc.', icon: '🌐' },
   { id: 'access',   label: 'Acceso',      shortLabel: 'Acceso',  icon: '🔐' },
 ]
 
 // Pestañas principales en la barra inferior móvil
-const BOTTOM_TABS: Tab[] = ['search', 'video', 'youtube', 'tiktok', 'chat']
+const BOTTOM_TABS: Tab[] = ['search', 'video', 'vault', 'cami', 'chat']
 
 export default function App() {
   const [tab, setTab] = useState<Tab>('search')
