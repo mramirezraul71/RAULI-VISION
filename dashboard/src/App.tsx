@@ -39,7 +39,7 @@ const TABS: { id: Tab; label: string; shortLabel: string; icon: string }[] = [
   { id: 'noticias', label: 'Noticias',    shortLabel: 'Noticias',icon: '📰' },
   { id: 'chat',     label: 'IA',          shortLabel: 'IA',      icon: '💬' },
   { id: 'cami',     label: 'CAMI',        shortLabel: 'CAMI',    icon: '🎵' },
-  { id: 'vault',    label: 'Vault',       shortLabel: 'Vault',   icon: '📦' },
+  { id: 'vault',    label: 'Bóveda',      shortLabel: 'Bóveda',  icon: '📦' },
   { id: 'clima',    label: 'Clima',       shortLabel: 'Clima',   icon: '☀️' },
   { id: 'traducir', label: 'Traducir',    shortLabel: 'Traduc.', icon: '🌐' },
   { id: 'access',   label: 'Acceso',      shortLabel: 'Acceso',  icon: '🔐' },

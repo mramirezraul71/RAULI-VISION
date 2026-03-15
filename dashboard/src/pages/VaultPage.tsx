@@ -129,7 +129,7 @@ export default function VaultPage() {
         <div style={{ maxWidth: 900, margin: '0 auto' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
             <span style={{ fontSize: 22 }}>🎬</span>
-            <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: '#f1f5f9' }}>RAULI Vault</h1>
+            <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: '#f1f5f9' }}>RAULI Bóveda</h1>
             <span style={{
               background: '#0f172a', border: '1px solid #334155', borderRadius: 6,
               padding: '2px 8px', fontSize: 11, color: '#94a3b8', marginLeft: 4,
