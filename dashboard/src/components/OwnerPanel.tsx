@@ -2,6 +2,8 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useMutation } from '@tanstack/react-query'
 
 const STORAGE_KEY = 'rv_owner_token'
+// Conectar SSE directo al proxy-backend (Vercel bufferea SSE y lo corta)
+const API_BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? ''
 
 interface ActivityEvent {
   id: string
@@ -94,7 +96,7 @@ export function OwnerPanel() {
       // Sin red — intentar SSE de todas formas
     }
 
-    const es = new EventSource(`/api/owner/activity?token=${encodeURIComponent(token)}`)
+    const es = new EventSource(`${API_BASE}/api/owner/activity?token=${encodeURIComponent(token)}`)
     sseRef.current = es
     es.addEventListener('activity', (e) => {
       try {

@@ -54,6 +54,23 @@ export default function App() {
   const [checkingUpdate, setCheckingUpdate] = useState(false)
   const registrationRef = useRef<ServiceWorkerRegistration | null>(null)
 
+  // Forzar desregistro del SW si la versión cambió — garantiza código fresco
+  useEffect(() => {
+    const SW_VERSION_KEY = 'rv_sw_version'
+    const stored = localStorage.getItem(SW_VERSION_KEY)
+    if (stored !== APP_VERSION && 'serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(regs => {
+        if (regs.length === 0) return
+        Promise.all(regs.map(r => r.unregister())).then(() => {
+          localStorage.setItem(SW_VERSION_KEY, APP_VERSION)
+          window.location.reload()
+        })
+      })
+    } else {
+      localStorage.setItem(SW_VERSION_KEY, APP_VERSION)
+    }
+  }, [])
+
   // Cerrar drawer con tecla Escape
   useEffect(() => {
     if (!drawerOpen) return
