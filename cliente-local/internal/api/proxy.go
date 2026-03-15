@@ -155,7 +155,12 @@ func (p *Proxy) serveAPI(w http.ResponseWriter, r *http.Request) {
 	}
 
 	req.Header.Set("X-Request-ID", r.Header.Get("X-Request-ID"))
-	resp, err := p.client.Do(req)
+	// SSE: usar cliente sin timeout para streams de larga duración
+	httpClient := p.client
+	if r.Header.Get("Accept") == "text/event-stream" || strings.HasSuffix(r.URL.Path, "/activity") {
+		httpClient = &http.Client{Timeout: 0}
+	}
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		if r.URL.Path == "/api/health" {
 			p.writeHealth(w, map[string]interface{}{"status": "ok", "proxy": "ok", "espejo": "unreachable", "version": p.version})
@@ -187,6 +192,35 @@ func (p *Proxy) serveAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer resp.Body.Close()
+
+	// SSE: si la respuesta es text/event-stream, hacer streaming directo sin buffer
+	if strings.Contains(resp.Header.Get("Content-Type"), "text/event-stream") {
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			writeErr(w, http.StatusInternalServerError, "streaming_not_supported", "El servidor no soporta streaming.")
+			return
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("Connection", "keep-alive")
+		w.Header().Set("X-Accel-Buffering", "no")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.WriteHeader(http.StatusOK)
+		flusher.Flush()
+		buf := make([]byte, 4096)
+		for {
+			n, readErr := resp.Body.Read(buf)
+			if n > 0 {
+				if _, writeErr := w.Write(buf[:n]); writeErr != nil {
+					return
+				}
+				flusher.Flush()
+			}
+			if readErr != nil {
+				return
+			}
+		}
+	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
