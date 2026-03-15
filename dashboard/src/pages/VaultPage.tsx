@@ -134,7 +134,7 @@ export default function VaultPage() {
               background: '#0f172a', border: '1px solid #334155', borderRadius: 6,
               padding: '2px 8px', fontSize: 11, color: '#94a3b8', marginLeft: 4,
             }}>
-              <span style={{ marginRight: 4 }}>⚡</span>Sin Internet
+              📦 Contenido local
             </span>
           </div>
           <p style={{ margin: 0, fontSize: 13, color: '#64748b' }}>
