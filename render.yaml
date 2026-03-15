@@ -36,7 +36,7 @@ services:
     plan: starter
     branch: master
     rootDir: cliente-local
-    buildCommand: cd ../dashboard && npm install && npm run build && cp -r dist/* ../cliente-local/static/ && cd ../cliente-local && go mod download && CGO_ENABLED=0 go build -ldflags="-s -w" -o proxy ./cmd/proxy
+    buildCommand: go mod download && CGO_ENABLED=0 go build -ldflags="-s -w" -o proxy ./cmd/proxy
     startCommand: ./proxy
     envVars:
       - key: PORT
