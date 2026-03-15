@@ -244,16 +244,32 @@ func (s *Service) ServeRecent(w http.ResponseWriter, r *http.Request) {
 
 func (s *Service) checkToken(r *http.Request) bool {
 	if s.adminToken == "" {
+		log.Printf("🔑 checkToken: ADMIN_TOKEN no configurado")
 		return false
 	}
 	token := strings.TrimSpace(r.Header.Get("X-Admin-Token"))
+	source := "header"
 	if token == "" {
 		token = strings.TrimSpace(r.URL.Query().Get("token"))
+		source = "query"
 	}
 	if strings.HasPrefix(strings.ToLower(token), "bearer ") {
 		token = strings.TrimSpace(token[7:])
 	}
-	return token == s.adminToken
+	match := token == s.adminToken
+	if !match {
+		log.Printf("🔑 checkToken FAIL via %s: recibido_len=%d stored_len=%d recibido_prefix=%q stored_prefix=%q",
+			source, len(token), len(s.adminToken),
+			safePrefix(token, 4), safePrefix(s.adminToken, 4))
+	}
+	return match
+}
+
+func safePrefix(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "..."
 }
 
 const ownerSystemPrompt = `Eres el asistente de control del Owner de RAULI-VISION, una plataforma de entretenimiento digital.
