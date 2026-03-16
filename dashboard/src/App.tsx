@@ -108,9 +108,15 @@ function AppContent() {
     const stored = localStorage.getItem(SW_VERSION_KEY)
     if (stored !== APP_VERSION && 'serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(regs => {
-        if (regs.length === 0) return
+        if (regs.length === 0) {
+          localStorage.setItem(SW_VERSION_KEY, APP_VERSION)
+          return
+        }
+        // Preservar token de usuario antes del reload
+        const userToken = localStorage.getItem('rauli_user_token')
         Promise.all(regs.map(r => r.unregister())).then(() => {
           localStorage.setItem(SW_VERSION_KEY, APP_VERSION)
+          if (userToken) localStorage.setItem('rauli_user_token', userToken)
           window.location.reload()
         })
       })
