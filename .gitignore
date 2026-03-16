@@ -63,3 +63,4 @@ coverage.html
 .env.production.local
 
 dashboard/dev-dist
+OWNER_TOKEN.txt
