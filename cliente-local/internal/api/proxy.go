@@ -43,6 +43,18 @@ func NewProxy(espejoURL, clientID, clientSecret, version string, c *cache.Cache,
 }
 
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// /owner/* y /vault/* van directamente a espejo con rewrite de path,
+	// replicando el comportamiento de los Vercel rewrites en entorno local.
+	if strings.HasPrefix(r.URL.Path, "/owner") {
+		r.URL.Path = "/api" + r.URL.Path
+		p.serveAPI(w, r)
+		return
+	}
+	if strings.HasPrefix(r.URL.Path, "/vault") {
+		r.URL.Path = "/api" + r.URL.Path
+		p.serveAPI(w, r)
+		return
+	}
 	if r.URL.Path == "/" || r.URL.Path == "" || !strings.HasPrefix(r.URL.Path, "/api") {
 		p.serveStatic(w, r)
 		return
@@ -118,7 +130,10 @@ func (p *Proxy) serveAPI(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	needToken := r.URL.Path != "/api/health"
+	// /api/owner/* y /api/vault/* usan su propio X-Admin-Token — no necesitan JWT del proxy
+	needToken := r.URL.Path != "/api/health" &&
+		!strings.HasPrefix(r.URL.Path, "/api/owner") &&
+		!strings.HasPrefix(r.URL.Path, "/api/vault")
 	var token string
 	if needToken {
 		var err error

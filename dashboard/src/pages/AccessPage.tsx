@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   approveAccessRequest,
   createAccessRequest,
+  directCreateUser,
   listAccessRequests,
   listAccessUsers,
   rejectAccessRequest,
@@ -114,6 +115,10 @@ export function AccessPage() {
   const [selectedRequests, setSelectedRequests] = useState<Set<string>>(new Set())
   const [bulkPending, setBulkPending] = useState(false)
 
+  // Creación directa de usuario (sin solicitud)
+  const [directForm, setDirectForm] = useState({ name: '', email: '', role: '', organization: '', access_code: '' })
+  const [lastDirectCreated, setLastDirectCreated] = useState<AccessUser | null>(null)
+
   useEffect(() => {
     setAdminToken(localStorage.getItem(ADMIN_TOKEN_KEY) ?? '')
     setAdminName(localStorage.getItem(ADMIN_NAME_KEY) ?? '')
@@ -148,6 +153,28 @@ export function AccessPage() {
     queryFn: () => listAccessUsers(adminToken, userFilter === 'all' ? undefined : userFilter),
     enabled: adminReady,
     refetchInterval: adminReady ? 15_000 : false,
+  })
+
+  const directCreateMutation = useMutation({
+    mutationFn: () => directCreateUser(
+      {
+        name: directForm.name.trim(),
+        email: directForm.email.trim() || undefined,
+        role: directForm.role.trim() || undefined,
+        organization: directForm.organization.trim() || undefined,
+        access_code: directForm.access_code.trim().toUpperCase() || undefined,
+      },
+      adminToken,
+      adminName,
+    ),
+    onSuccess: (data) => {
+      setLastDirectCreated(data.user)
+      setDirectForm({ name: '', email: '', role: '', organization: '', access_code: '' })
+      if (data.user?.access_code && data.user?.name) {
+        syncUserToAtlas(data.user.name, data.user.access_code)
+      }
+      queryClient.invalidateQueries({ queryKey: ['accessUsers'] })
+    },
   })
 
   const approveMutation = useMutation({
@@ -407,6 +434,96 @@ export function AccessPage() {
               <p className="text-[10px] text-emerald-200/50 pt-1">
                 El avatar ATLAS saludará a {lastApproved.name} por su nombre al abrir el enlace.
               </p>
+            </div>
+          )}
+        </section>
+
+        {/* ── Sección: Crear usuario directamente ───────────────────────────── */}
+        <section className="rounded-xl border border-[rgba(56,139,253,0.3)] bg-[rgba(22,27,34,0.85)] p-5 backdrop-blur">
+          <h3 className="text-lg font-semibold text-accent">Dar acceso directo</h3>
+          <p className="text-sm text-muted mt-2">
+            Crea un usuario sin necesidad de solicitud. El código de acceso se genera automáticamente (o puedes indicarlo tú).
+          </p>
+
+          {!adminReady ? (
+            <div className="mt-4 rounded-lg border border-amber-400/40 bg-amber-500/10 p-4 text-sm text-amber-200">
+              Configure el token de administración para crear usuarios directamente.
+            </div>
+          ) : (
+            <form
+              className="mt-4 grid gap-3"
+              onSubmit={(e) => { e.preventDefault(); directCreateMutation.mutate() }}
+            >
+              <div className="grid gap-3 sm:grid-cols-2">
+                <input
+                  required
+                  value={directForm.name}
+                  onChange={e => setDirectForm(f => ({ ...f, name: e.target.value }))}
+                  placeholder="Nombre *"
+                  className="rounded-lg border border-[rgba(56,139,253,0.3)] bg-[#0d1117] px-4 py-2 text-[#e6edf3] placeholder-muted focus:border-accent focus:outline-none"
+                />
+                <input
+                  type="email"
+                  value={directForm.email}
+                  onChange={e => setDirectForm(f => ({ ...f, email: e.target.value }))}
+                  placeholder="Correo (opcional)"
+                  className="rounded-lg border border-[rgba(56,139,253,0.3)] bg-[#0d1117] px-4 py-2 text-[#e6edf3] placeholder-muted focus:border-accent focus:outline-none"
+                />
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <input
+                  value={directForm.role}
+                  onChange={e => setDirectForm(f => ({ ...f, role: e.target.value }))}
+                  placeholder="Rol (opcional)"
+                  className="rounded-lg border border-[rgba(56,139,253,0.3)] bg-[#0d1117] px-4 py-2 text-[#e6edf3] placeholder-muted focus:border-accent focus:outline-none"
+                />
+                <input
+                  value={directForm.access_code}
+                  onChange={e => setDirectForm(f => ({ ...f, access_code: e.target.value.toUpperCase() }))}
+                  placeholder="Código personalizado (opcional)"
+                  className="rounded-lg border border-[rgba(56,139,253,0.3)] bg-[#0d1117] px-4 py-2 text-[#e6edf3] placeholder-muted focus:border-accent focus:outline-none font-mono"
+                />
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  type="submit"
+                  disabled={directCreateMutation.isPending}
+                  className="rounded-lg bg-emerald-500/20 text-emerald-200 px-4 py-2 font-medium hover:bg-emerald-500/30 transition disabled:opacity-50"
+                >
+                  {directCreateMutation.isPending ? 'Creando…' : 'Crear usuario'}
+                </button>
+                {directCreateMutation.isError && (
+                  <span className="text-sm text-red-400">{(directCreateMutation.error as Error).message}</span>
+                )}
+              </div>
+            </form>
+          )}
+
+          {lastDirectCreated && (
+            <div className="mt-4 rounded-lg border border-emerald-400/40 bg-emerald-500/10 p-4 text-sm space-y-2">
+              <p className="text-emerald-300 font-semibold">✓ Usuario creado</p>
+              <p className="text-muted">
+                <span className="text-[#e6edf3] font-medium">{lastDirectCreated.name}</span>
+                {lastDirectCreated.email ? ` · ${lastDirectCreated.email}` : ''}
+              </p>
+              <div>
+                <p className="text-[10px] text-emerald-200/60 uppercase tracking-widest mb-1">Enlace personalizado</p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="rounded-md border border-emerald-400/40 px-2 py-1 text-[11px] text-emerald-100 font-mono break-all">
+                    {buildPersonalizedLink(lastDirectCreated.access_code)}
+                  </span>
+                  <CopyButton value={buildPersonalizedLink(lastDirectCreated.access_code)} label="Copiar enlace" />
+                </div>
+              </div>
+              <div>
+                <p className="text-[10px] text-emerald-200/60 uppercase tracking-widest mb-1">Código de acceso</p>
+                <div className="flex items-center gap-2">
+                  <span className="rounded-md border border-emerald-400/40 px-2 py-1 text-xs text-emerald-200 font-mono tracking-wider">
+                    {lastDirectCreated.access_code}
+                  </span>
+                  <CopyButton value={lastDirectCreated.access_code} label="Copiar" />
+                </div>
+              </div>
             </div>
           )}
         </section>

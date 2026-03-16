@@ -1,6 +1,8 @@
 const ENV_BASE = (import.meta.env.VITE_API_URL ?? '').replace(/\/+$/, '')
 const PRIMARY_BASE = ENV_BASE ? `${ENV_BASE}/api/vault` : '/api/vault'
-const FALLBACK_BASES = ['/vault', '/api/vault']
+// Fallback: /vault pasa por el proxy cliente-local que reescribe a /api/vault internamente
+const FALLBACK_BASES = ['/api/vault', '/vault']
+// 401 NO es reintentable — significa que el usuario no está autorizado, no un error de red
 const RETRYABLE_STATUS = new Set([404, 502, 503, 504])
 
 let activeBase = PRIMARY_BASE
@@ -81,12 +83,20 @@ export interface VaultCatalogParams {
   q?: string
 }
 
+/** Lee el token de usuario del localStorage para inyectar ?u= en las llamadas autenticadas */
+function vaultUserToken(): string {
+  try { return localStorage.getItem('rauli_user_token') ?? '' } catch { return '' }
+}
+
 export async function getVaultCatalog(params: VaultCatalogParams = {}): Promise<VaultCatalogResponse> {
   const qs = new URLSearchParams()
   if (params.channel)  qs.set('channel',  params.channel)
   if (params.category) qs.set('category', params.category)
   if (params.genre)    qs.set('genre',    params.genre)
   if (params.q)        qs.set('q',        params.q)
+  // Inyectar token de usuario para requireAuth en el backend
+  const ut = vaultUserToken()
+  if (ut) qs.set('u', ut)
   const suffix = qs.toString() ? `/catalog?${qs}` : '/catalog'
   const res = await requestVault(suffix)
   if (!res.ok) throw new Error(`vault catalog: ${res.status}`)

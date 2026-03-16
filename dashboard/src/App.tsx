@@ -13,6 +13,7 @@ import { DivisasWidget } from './components/DivisasWidget'
 import { DigestButton } from './components/DigestButton'
 import { ExchangeWidget } from './components/ExchangeWidget'
 import { DigestPanel } from './components/DigestPanel'
+import { AccessGate } from './pages/AccessGate'
 import { SearchPage } from './pages/SearchPage'
 import { VideoPage } from './pages/VideoPage'
 import { ChatPage } from './pages/ChatPage'
@@ -48,7 +49,51 @@ const TABS: { id: Tab; label: string; shortLabel: string; icon: string }[] = [
 // Pestañas principales en la barra inferior móvil
 const BOTTOM_TABS: Tab[] = ['search', 'video', 'vault', 'cami', 'chat']
 
+const USER_TOKEN_KEY = 'rauli_user_token'
+
+/** Comprueba y persiste el código de acceso desde la URL o el localStorage. */
+function resolveAccessToken(): string {
+  try {
+    const params = new URLSearchParams(window.location.search)
+    const uParam = params.get('u')?.trim().toUpperCase()
+    if (uParam) {
+      localStorage.setItem(USER_TOKEN_KEY, uParam)
+      const cleanUrl = window.location.pathname + (window.location.hash || '')
+      window.history.replaceState(null, '', cleanUrl)
+      return uParam
+    }
+    return localStorage.getItem(USER_TOKEN_KEY) ?? ''
+  } catch {
+    return ''
+  }
+}
+
+/** Componente raíz: gestiona autenticación y decide si mostrar el gate o la app. */
 export default function App() {
+  const [authenticated, setAuthenticated] = useState<boolean>(() => !!resolveAccessToken())
+
+  const handleAuthenticated = (code: string) => {
+    localStorage.setItem(USER_TOKEN_KEY, code)
+    setAuthenticated(true)
+  }
+
+  if (!authenticated) {
+    return (
+      <ErrorBoundary>
+        <AccessGate onAuthenticated={handleAuthenticated} />
+      </ErrorBoundary>
+    )
+  }
+
+  return (
+    <ErrorBoundary>
+      <AppContent />
+    </ErrorBoundary>
+  )
+}
+
+/** Contenido principal de la app (solo se monta si el usuario está autenticado). */
+function AppContent() {
   const [tab, setTab] = useState<Tab>('search')
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [checkingUpdate, setCheckingUpdate] = useState(false)

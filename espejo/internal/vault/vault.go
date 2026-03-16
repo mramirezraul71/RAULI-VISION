@@ -213,6 +213,13 @@ func (s *Service) HandleCatalog(w http.ResponseWriter, r *http.Request) {
 		}
 		it.Active = active == 1
 		it.FilePath = "" // no exponer ruta
+		// Parsear created_at desde SQLite (puede venir como "2006-01-02 15:04:05" o RFC3339)
+		for _, layout := range []string{time.RFC3339Nano, time.RFC3339, "2006-01-02 15:04:05", "2006-01-02T15:04:05Z"} {
+			if t, err := time.Parse(layout, createdStr); err == nil {
+				it.CreatedAt = t
+				break
+			}
+		}
 		if q != "" && !strings.Contains(strings.ToLower(it.Title), q) &&
 			!strings.Contains(strings.ToLower(it.Artist), q) &&
 			!strings.Contains(strings.ToLower(it.Genre), q) {

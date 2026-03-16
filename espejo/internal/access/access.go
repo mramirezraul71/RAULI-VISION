@@ -324,6 +324,92 @@ func (s *Service) SetUserStatus(id, status string) (AccessUser, error) {
 	return user, nil
 }
 
+// ValidateUser devuelve true si el código pertenece a un usuario activo.
+// No actualiza la presencia — usa Ping() para eso.
+func (s *Service) ValidateUser(code string) bool {
+	code = strings.TrimSpace(strings.ToUpper(code))
+	if code == "" {
+		return false
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, u := range s.store.Users {
+		if strings.EqualFold(u.AccessCode, code) && u.Status == UserActive {
+			return true
+		}
+	}
+	return false
+}
+
+// DirectCreateInput son los datos para crear un usuario directamente (sin solicitud).
+type DirectCreateInput struct {
+	Name         string
+	Email        string
+	Role         string
+	Organization string
+	AccessCode   string // opcional — si vacío se genera uno aleatorio
+	CreatedBy    string
+}
+
+// DirectCreate crea un usuario activo directamente, sin pasar por el flujo de solicitud.
+// Útil para que el owner registre usuarios de confianza o envíe invitaciones.
+func (s *Service) DirectCreate(input DirectCreateInput) (AccessUser, error) {
+	name := strings.TrimSpace(input.Name)
+	if name == "" {
+		return AccessUser{}, errors.New("nombre requerido")
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Verificar duplicados por email
+	email := strings.TrimSpace(strings.ToLower(input.Email))
+	if email != "" {
+		for _, u := range s.store.Users {
+			if strings.EqualFold(u.Email, email) {
+				return AccessUser{}, errors.New("el usuario ya está registrado con ese correo")
+			}
+		}
+	}
+
+	code := strings.TrimSpace(strings.ToUpper(input.AccessCode))
+	if code == "" {
+		var err error
+		code, err = newAccessCode()
+		if err != nil {
+			return AccessUser{}, err
+		}
+	} else {
+		// Verificar que el código no está en uso
+		for _, u := range s.store.Users {
+			if strings.EqualFold(u.AccessCode, code) {
+				return AccessUser{}, errors.New("código de acceso ya en uso")
+			}
+		}
+	}
+
+	now := time.Now().UTC()
+	user := AccessUser{
+		ID:           newID("usr"),
+		Name:         name,
+		Email:        email,
+		Role:         strings.TrimSpace(input.Role),
+		Organization: strings.TrimSpace(input.Organization),
+		Status:       UserActive,
+		AccessCode:   code,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+		ActivatedAt:  &now,
+		ApprovedBy:   strings.TrimSpace(input.CreatedBy),
+	}
+
+	s.store.Users[user.ID] = user
+	if err := s.saveLocked(); err != nil {
+		return AccessUser{}, err
+	}
+	return user, nil
+}
+
 func (s *Service) load() error {
 	s.store = Store{
 		Version:   1,

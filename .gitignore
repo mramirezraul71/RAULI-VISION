@@ -12,7 +12,11 @@ credenciales.txt
 *.exe
 *.sum
 espejo/espejo
-espejo/data/
+# espejo/data/ NOT ignored — access-store.json is the seed for production users
+# vault.db and other DB files are already covered by *.db rule above
+espejo/data/storage/
+espejo/data/cami/
+espejo/data/feedback-escalations/
 cliente-local/rauli-proxy
 cliente-local/rauli-proxy.exe
 cliente-local/proxy

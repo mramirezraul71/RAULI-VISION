@@ -59,6 +59,13 @@ func (h *Handlers) GetVaultCatalog(w http.ResponseWriter, r *http.Request) {
 	h.Vault.HandleCatalog(w, r)
 }
 func (h *Handlers) StreamVaultItem(w http.ResponseWriter, r *http.Request) {
+	userID := strings.TrimSpace(r.URL.Query().Get("u"))
+	if userID == "" {
+		userID = "anónimo"
+	}
+	id := strings.TrimPrefix(r.URL.Path, "/api/vault/stream/")
+	id = strings.TrimSuffix(id, "/")
+	owner.Emit("tv", userID, "Reproduce Bóveda: "+id, map[string]interface{}{"item_id": id})
 	h.Vault.HandleStream(w, r)
 }
 func (h *Handlers) PostVaultUpload(w http.ResponseWriter, r *http.Request) {
@@ -265,6 +272,60 @@ func (h *Handlers) HandleAccessUserAction(w http.ResponseWriter, r *http.Request
 	writeJSON(w, http.StatusOK, map[string]interface{}{"user": user})
 }
 
+// PostAccessValidate — endpoint público para que el frontend verifique si un código es válido.
+func (h *Handlers) PostAccessValidate(w http.ResponseWriter, r *http.Request) {
+	if h.Access == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "access_unavailable"})
+		return
+	}
+	var body struct {
+		Code string `json:"code"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad_request", "message": "JSON inválido"})
+		return
+	}
+	valid := h.Access.ValidateUser(body.Code)
+	writeJSON(w, http.StatusOK, map[string]bool{"valid": valid})
+}
+
+// PostAccessDirectCreate — el owner crea un usuario directamente (sin solicitud).
+// Requiere X-Admin-Token.
+func (h *Handlers) PostAccessDirectCreate(w http.ResponseWriter, r *http.Request) {
+	if !h.authorizeAdmin(w, r) {
+		return
+	}
+	var body struct {
+		Name         string `json:"name"`
+		Email        string `json:"email"`
+		Role         string `json:"role"`
+		Organization string `json:"organization"`
+		AccessCode   string `json:"access_code"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad_request", "message": "JSON inválido"})
+		return
+	}
+	decidedBy := strings.TrimSpace(r.Header.Get("X-Admin-Name"))
+	user, err := h.Access.DirectCreate(access.DirectCreateInput{
+		Name:         body.Name,
+		Email:        body.Email,
+		Role:         body.Role,
+		Organization: body.Organization,
+		AccessCode:   body.AccessCode,
+		CreatedBy:    decidedBy,
+	})
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "create_failed", "message": err.Error()})
+		return
+	}
+	atlas.Emit("Usuario creado directamente en RAULI-VISION", "med", "rauli-vision.access", map[string]interface{}{
+		"user_id": user.ID,
+		"name":    user.Name,
+	})
+	writeJSON(w, http.StatusCreated, map[string]interface{}{"user": user})
+}
+
 func (h *Handlers) GetSearch(w http.ResponseWriter, r *http.Request) {
 	q, ok := validate.SearchQuery(r.URL.Query().Get("q"))
 	if !ok {
@@ -362,6 +423,10 @@ func (h *Handlers) PostVideoRequest(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) GetVideoStream(w http.ResponseWriter, r *http.Request) {
+	userID := strings.TrimSpace(r.URL.Query().Get("u"))
+	if userID == "" {
+		userID = "anónimo"
+	}
 	id := strings.TrimPrefix(r.URL.Path, "/api/video/")
 	id = strings.TrimSuffix(id, "/stream")
 	id = strings.TrimSuffix(id, "/")
@@ -386,6 +451,7 @@ func (h *Handlers) GetVideoStream(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, target, http.StatusFound)
 		return
 	}
+	owner.Emit("tv", userID, "Ve TV: "+id, map[string]interface{}{"channel": id, "mode": map[bool]string{true: "cuba", false: "direct"}[cubaMode]})
 	// API — responder con JSON
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"id":         id,
@@ -576,10 +642,15 @@ func (h *Handlers) GetTikTokFetch(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	userID := strings.TrimSpace(r.URL.Query().Get("u"))
+	if userID == "" {
+		userID = "anónimo"
+	}
 	atlas.Emit("TikTok video proxy solicitado", "low", "rauli-vision.tiktok", map[string]interface{}{
 		"video_id": info.ID,
 		"uploader": info.Uploader,
 	})
+	owner.Emit("tiktok", userID, "TikTok: "+info.Title, map[string]interface{}{"uploader": info.Uploader})
 	writeJSON(w, http.StatusOK, info)
 }
 
@@ -710,6 +781,11 @@ func (h *Handlers) GetTikTokSearch(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "fetch_failed", "message": err.Error()})
 		return
 	}
+	userID := strings.TrimSpace(r.URL.Query().Get("u"))
+	if userID == "" {
+		userID = "anónimo"
+	}
+	owner.Emit("tiktok", userID, "Busca TikTok: "+q, map[string]interface{}{"results": len(items)})
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"items":    items,
 		"cursor":   nextCursor,
@@ -863,6 +939,11 @@ func (h *Handlers) GetRadioSearch(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "radio_error", "message": err.Error()})
 		return
 	}
+	userID := strings.TrimSpace(r.URL.Query().Get("u"))
+	if userID == "" {
+		userID = "anónimo"
+	}
+	owner.Emit("radio", userID, "Busca radio: "+q, map[string]interface{}{"results": len(stations)})
 	writeJSON(w, http.StatusOK, map[string]interface{}{"stations": stations, "total": len(stations), "query": q})
 }
 
@@ -925,6 +1006,11 @@ func (h *Handlers) GetYouTubeSearch(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "youtube_error", "message": err.Error()})
 		return
 	}
+	userID := strings.TrimSpace(r.URL.Query().Get("u"))
+	if userID == "" {
+		userID = "anónimo"
+	}
+	owner.Emit("search", userID, "Busca YouTube: "+q, map[string]interface{}{"results": len(results)})
 	writeJSON(w, http.StatusOK, map[string]interface{}{"query": q, "results": results, "total": len(results)})
 }
 
@@ -939,6 +1025,11 @@ func (h *Handlers) GetYouTubeStream(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "youtube_stream_error", "message": err.Error()})
 		return
 	}
+	userID := strings.TrimSpace(r.URL.Query().Get("u"))
+	if userID == "" {
+		userID = "anónimo"
+	}
+	owner.Emit("tv", userID, "YouTube: "+id, map[string]interface{}{"video_id": id})
 	writeJSON(w, http.StatusOK, si)
 }
 

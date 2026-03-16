@@ -88,16 +88,18 @@ func Register(mux *http.ServeMux, version string, authSvc *auth.Service, searchS
 		return f
 	}
 	chain := func(f http.HandlerFunc) http.HandlerFunc {
-		return rateWrap(logWrap(wrap(optionalAuth(authSvc, accessSvc, f))))
+		return rateWrap(logWrap(wrap(requireAuth(authSvc, accessSvc, f))))
 	}
 
 	mux.HandleFunc("POST /auth/token", rateWrap(logWrap(h.PostAuthToken)))
 	mux.HandleFunc("GET /api/health", rateWrap(logWrap(h.GetHealth)))
 	mux.HandleFunc("POST /api/access/requests", rateWrap(logWrap(wrap(h.PostAccessRequest))))
+	mux.HandleFunc("POST /api/access/validate", rateWrap(logWrap(wrap(h.PostAccessValidate)))) // público — verifica si un código es válido
 	mux.HandleFunc("GET /api/access/requests", rateWrap(logWrap(wrap(h.ListAccessRequests))))
 	mux.HandleFunc("POST /api/access/requests/", rateWrap(logWrap(wrap(h.HandleAccessRequestAction))))
 	mux.HandleFunc("GET /api/access/users", rateWrap(logWrap(wrap(h.ListAccessUsers))))
 	mux.HandleFunc("PUT /api/access/users/", rateWrap(logWrap(wrap(h.HandleAccessUserAction))))
+	mux.HandleFunc("POST /api/access/users/direct", rateWrap(logWrap(wrap(h.PostAccessDirectCreate)))) // owner crea usuario directamente
 	mux.HandleFunc("POST /api/access/presence/", rateWrap(logWrap(h.PostPresence))) // sin auth, solo heartbeat
 	mux.HandleFunc("GET /api/search", chain(h.getSearch))
 	mux.HandleFunc("GET /api/video/search", chain(h.getVideoSearch))
@@ -247,26 +249,45 @@ func (h *Handlers) serveVideoPost(w http.ResponseWriter, r *http.Request) {
 	h.PostVideoRequest(w, r)
 }
 
-// optionalAuth valida el token JWT si está presente y, si es válido, registra
-// actividad de presencia en tiempo real usando el client_id (= access_code).
-// optionalAuth detecta la identidad del usuario por dos vías y registra
-// actividad real de presencia cada vez que hace una llamada API:
+// requireAuth verifica que la petición incluya un código de acceso válido.
+// Identifica al usuario por dos vías:
 //  1. JWT Bearer token (client_id == access_code)
 //  2. Query param ?u=ACCESS_CODE (para clientes sin JWT)
-func optionalAuth(authSvc *auth.Service, accessSvc *access.Service, next http.HandlerFunc) http.HandlerFunc {
+//
+// Si el código no pertenece a ningún usuario activo → 401 Unauthorized.
+// Si es válido → registra presencia y delega en el siguiente handler.
+func requireAuth(authSvc *auth.Service, accessSvc *access.Service, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if accessSvc != nil {
-			// Vía 1: JWT Bearer
-			if authH := r.Header.Get("Authorization"); authH != "" && strings.HasPrefix(authH, "Bearer ") {
-				if clientID, err := authSvc.ValidateToken(strings.TrimPrefix(authH, "Bearer ")); err == nil && clientID != "" {
-					accessSvc.Ping(clientID)
-				}
-			}
-			// Vía 2: ?u=ACCESS_CODE (sin autenticación, más simple para el frontend)
-			if u := strings.TrimSpace(r.URL.Query().Get("u")); u != "" {
-				accessSvc.Ping(u)
+		if accessSvc == nil {
+			// Sin servicio de accesos configurado: dejar pasar (modo permisivo)
+			next(w, r)
+			return
+		}
+
+		var code string
+
+		// Vía 1: JWT Bearer
+		if authH := r.Header.Get("Authorization"); authH != "" && strings.HasPrefix(authH, "Bearer ") {
+			if clientID, err := authSvc.ValidateToken(strings.TrimPrefix(authH, "Bearer ")); err == nil && clientID != "" {
+				code = clientID
 			}
 		}
+
+		// Vía 2: ?u=ACCESS_CODE
+		if code == "" {
+			code = strings.TrimSpace(r.URL.Query().Get("u"))
+		}
+
+		if !accessSvc.ValidateUser(code) {
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			w.Header().Set("X-Auth-Required", "access_code")
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte(`{"error":"unauthorized","message":"Acceso restringido. Usa tu enlace personalizado o solicita acceso al administrador."}`))
+			return
+		}
+
+		// Código válido — registrar presencia
+		accessSvc.Ping(code)
 		next(w, r)
 	}
 }

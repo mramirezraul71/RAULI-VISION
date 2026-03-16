@@ -497,6 +497,45 @@ export async function listAccessUsers(adminToken: string, status?: string): Prom
   return r.json()
 }
 
+/** Valida si un código de acceso es válido (está registrado y activo). */
+export async function validateAccessCode(code: string): Promise<boolean> {
+  try {
+    const r = await fetch(`${BASE}/api/access/validate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code }),
+    })
+    if (!r.ok) return false
+    const data = await r.json() as { valid: boolean }
+    return data.valid === true
+  } catch {
+    return false
+  }
+}
+
+export type DirectCreateInput = {
+  name: string
+  email?: string
+  role?: string
+  organization?: string
+  access_code?: string
+}
+
+/** Crea un usuario directamente sin pasar por el flujo de solicitud (requiere admin token). */
+export async function directCreateUser(input: DirectCreateInput, adminToken: string, adminName?: string): Promise<{ user: AccessUser }> {
+  if (!adminToken) throw new Error('Token admin requerido')
+  const r = await fetch(`${BASE}/api/access/users/direct`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...adminHeaders(adminToken, adminName),
+    },
+    body: JSON.stringify(input),
+  })
+  if (!r.ok) throw new Error(await parseError(r, 'No se pudo crear el usuario'))
+  return r.json()
+}
+
 export async function updateAccessUserStatus(id: string, status: 'active' | 'disabled', adminToken: string, adminName?: string): Promise<{ user: AccessUser }> {
   if (!adminToken) throw new Error('Token admin requerido')
   const r = await fetch(`${BASE}/api/access/users/${encodeURIComponent(id)}`, {

@@ -112,6 +112,14 @@ func Emit(evType, userID, summary string, details map[string]interface{}, severi
 
 // ServeActivity es el handler SSE para el monitor del Owner.
 func (s *Service) ServeActivity(w http.ResponseWriter, r *http.Request) {
+	// CORS primero — las peticiones OPTIONS preflight no llevan token
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Admin-Token, Authorization")
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
 	// Verificar admin token
 	if !s.checkToken(r) {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
@@ -122,7 +130,6 @@ func (s *Service) ServeActivity(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("X-Accel-Buffering", "no")
 
 	flusher, ok := w.(http.Flusher)
@@ -180,6 +187,14 @@ func (s *Service) ServeActivity(w http.ResponseWriter, r *http.Request) {
 
 // ServeTask procesa una tarea del Owner via Gemini.
 func (s *Service) ServeTask(w http.ResponseWriter, r *http.Request) {
+	// CORS primero — las peticiones OPTIONS preflight no llevan token
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Admin-Token, Authorization")
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
 	if !s.checkToken(r) {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return
