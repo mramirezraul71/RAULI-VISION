@@ -26,6 +26,7 @@ import { NoticiasPage } from './pages/NoticiasPage'
 import { ClimaPage } from './pages/ClimaPage'
 import { TraducirPage } from './pages/TraducirPage'
 import VaultPage from './pages/VaultPage'
+import { VaultPlayerProvider, useVaultPlayer } from './contexts/VaultPlayerContext'
 import { APP_VERSION, CHANGELOG } from './constants/version'
 
 type Tab = 'search' | 'video' | 'tiktok' | 'chat' | 'cami' | 'access'
@@ -87,7 +88,9 @@ export default function App() {
 
   return (
     <ErrorBoundary>
-      <AppContent />
+      <VaultPlayerProvider>
+        <AppContent />
+      </VaultPlayerProvider>
     </ErrorBoundary>
   )
 }
@@ -403,6 +406,7 @@ function AppContent() {
             onLater={() => setNeedRefreshState(false)}
           />
         )}
+        <VaultMiniPlayer />
         <NetworkStatus />
         <HomeButton />
         <FeedbackAI />
@@ -410,5 +414,97 @@ function AppContent() {
         <AtlasCompanion />
       </div>
     </ErrorBoundary>
+  )
+}
+
+// ─── Mini-player persistente de música ────────────────────────────────────────
+// Aparece sobre la barra de navegación en móvil (bottom-14 = 56px) y
+// al borde inferior en escritorio (bottom-0).
+function VaultMiniPlayer() {
+  const { currentItem, isPlaying, shuffleOn, togglePlay, stop, next, toggleShuffle } = useVaultPlayer()
+  if (!currentItem) return null
+
+  const chColor = currentItem.channel === 'cami' ? '#a78bfa' : '#38bdf8'
+  const chLabel = currentItem.channel === 'cami' ? '✝️' : '🎭'
+
+  return (
+    <>
+      <style>{`@media (min-width: 768px) { .rv-miniplayer { bottom: 0 !important; } }`}</style>
+      <div
+        className="rv-miniplayer fixed left-0 right-0 z-40"
+        style={{
+          bottom: 56,
+          background: 'rgba(13,17,23,0.97)',
+          borderTop: `2px solid ${chColor}66`,
+          backdropFilter: 'blur(12px)',
+          padding: '0 16px',
+          height: 60,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+        }}
+      >
+        {/* Acento de color */}
+        <div style={{ width: 4, height: 36, borderRadius: 2, background: chColor, flexShrink: 0 }} />
+
+        {/* Canal + info de pista */}
+        <div style={{ fontSize: 20, flexShrink: 0 }}>{chLabel}</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: '#f1f5f9', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {currentItem.title}
+          </div>
+          {currentItem.artist && (
+            <div style={{ fontSize: 11, color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {currentItem.artist}
+            </div>
+          )}
+        </div>
+
+        {/* Controles */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+
+          {/* Shuffle on/off */}
+          <button onClick={toggleShuffle} title={shuffleOn ? 'Aleatorio: ON' : 'Aleatorio: OFF'}
+            style={{ background: shuffleOn ? `${chColor}25` : 'none', border: `1px solid ${shuffleOn ? chColor : '#2a3448'}`, borderRadius: 6, width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: shuffleOn ? chColor : '#475569', transition: 'all 0.15s' }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} width="14" height="14">
+              <polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/>
+              <polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/>
+              <line x1="4" y1="4" x2="9" y2="9"/>
+            </svg>
+          </button>
+
+          {/* Play / Pause */}
+          <button onClick={togglePlay} title={isPlaying ? 'Pausar' : 'Continuar'}
+            style={{ background: chColor, border: 'none', borderRadius: '50%', width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#0f1117', flexShrink: 0, boxShadow: `0 0 12px ${chColor}55` }}>
+            {isPlaying ? (
+              <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
+                <rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>
+              </svg>
+            ) : (
+              <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
+                <polygon points="5 3 19 12 5 21 5 3"/>
+              </svg>
+            )}
+          </button>
+
+          {/* Siguiente */}
+          <button onClick={next} title="Siguiente aleatoria"
+            style={{ background: 'none', border: '1px solid #2a3448', borderRadius: 6, width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#64748b', transition: 'all 0.15s' }}>
+            <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
+              <polygon points="5 4 15 12 5 20 5 4"/>
+              <line x1="19" y1="5" x2="19" y2="19" stroke="currentColor" strokeWidth={2} fill="none"/>
+            </svg>
+          </button>
+
+          {/* Detener / Desconectar */}
+          <button onClick={stop} title="Detener y desconectar"
+            style={{ background: 'none', border: '1px solid #3f1515', borderRadius: 6, width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#ef4444', transition: 'all 0.15s' }}>
+            <svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12">
+              <rect x="3" y="3" width="18" height="18" rx="2"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </>
   )
 }
