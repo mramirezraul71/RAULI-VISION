@@ -64,3 +64,6 @@ coverage.html
 
 dashboard/dev-dist
 OWNER_TOKEN.txt
+espejo/run_espejo.bat
+espejo/start_espejo.bat
+espejo/watch_espejo.bat
