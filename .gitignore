@@ -17,6 +17,10 @@ espejo/espejo
 espejo/data/storage/
 espejo/data/cami/
 espejo/data/feedback-escalations/
+espejo/storage/
+*.bak
+*.bak2
+*~
 cliente-local/rauli-proxy
 cliente-local/rauli-proxy.exe
 cliente-local/proxy
