@@ -420,6 +420,7 @@ export function AccessPage() {
           <p className="text-sm text-muted mt-2">Solo personal autorizado. El token se guarda localmente en este navegador.</p>
           <div className="mt-4 space-y-3">
             <input
+              type="password"
               value={adminToken}
               onChange={(event) => setAdminToken(event.target.value)}
               placeholder="Token de administración"

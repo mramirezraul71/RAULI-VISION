@@ -6,10 +6,36 @@
   <meta name="theme-color" content="#0d1117" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <title>RAULI-VISION</title>
-  <script type="module" crossorigin src="/assets/index-CRFCzjkd.js"></script>
+  <script type="module" crossorigin src="/assets/index-ZJ6nDp2h.js"></script>
   <link rel="stylesheet" crossorigin href="/assets/index-DvTTPFOk.css">
 <link rel="manifest" href="/manifest.webmanifest"></head>
 <body>
+  <!-- SW cache-buster: corre ANTES del bundle React.
+       index.html se sirve con no-cache → siempre fresco.
+       Si la versión cambió, limpia SW+caches y recarga para romper el ciclo. -->
+  <script>
+    (function() {
+      var V = '1.3.6';
+      var KEY = '__rv_app_ver__';
+      var prev = localStorage.getItem(KEY);
+      if (prev !== V) {
+        localStorage.setItem(KEY, V);
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.getRegistrations().then(function(regs) {
+            return Promise.all(regs.map(function(r) { return r.unregister(); }));
+          }).then(function() {
+            if (window.caches && window.caches.keys) {
+              return window.caches.keys().then(function(ks) {
+                return Promise.all(ks.map(function(k) { return window.caches.delete(k); }));
+              });
+            }
+          }).then(function() {
+            if (prev !== null) window.location.reload();
+          }).catch(function(){});
+        }
+      }
+    })();
+  </script>
   <div id="root"></div>
 </body>
 </html>
