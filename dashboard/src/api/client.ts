@@ -25,6 +25,7 @@ export type AccessRequest = {
   id: string
   name: string
   email: string
+  phone?: string
   role?: string
   organization?: string
   message?: string
@@ -43,10 +44,12 @@ export type AccessUser = {
   request_id?: string
   name: string
   email: string
+  phone?: string
   role?: string
   organization?: string
   status: 'active' | 'disabled'
   access_code: string
+  code_sent?: boolean
   created_at: string
   updated_at: string
   activated_at?: string
@@ -58,6 +61,7 @@ export type AccessUser = {
 export type AccessRequestInput = {
   name: string
   email: string
+  phone?: string
   role?: string
   organization?: string
   message?: string

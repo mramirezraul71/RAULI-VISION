@@ -27,6 +27,7 @@ type AccessRequest struct {
 	ID           string     `json:"id"`
 	Name         string     `json:"name"`
 	Email        string     `json:"email"`
+	Phone        string     `json:"phone,omitempty"`
 	Role         string     `json:"role,omitempty"`
 	Organization string     `json:"organization,omitempty"`
 	Message      string     `json:"message,omitempty"`
@@ -45,10 +46,12 @@ type AccessUser struct {
 	RequestID    string     `json:"request_id,omitempty"`
 	Name         string     `json:"name"`
 	Email        string     `json:"email"`
+	Phone        string     `json:"phone,omitempty"`
 	Role         string     `json:"role,omitempty"`
 	Organization string     `json:"organization,omitempty"`
 	Status       string     `json:"status"`
 	AccessCode   string     `json:"access_code"`
+	CodeSent     bool       `json:"code_sent,omitempty"`
 	CreatedAt    time.Time  `json:"created_at"`
 	UpdatedAt    time.Time  `json:"updated_at"`
 	ActivatedAt  *time.Time `json:"activated_at,omitempty"`
@@ -239,10 +242,12 @@ func (s *Service) ApproveRequest(id, note, decidedBy string) (AccessRequest, Acc
 		RequestID:    req.ID,
 		Name:         req.Name,
 		Email:        req.Email,
+		Phone:        req.Phone,
 		Role:         req.Role,
 		Organization: req.Organization,
 		Status:       UserActive,
 		AccessCode:   accessCode,
+		CodeSent:     false,
 		CreatedAt:    now,
 		UpdatedAt:    now,
 		ActivatedAt:  &now,

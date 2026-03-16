@@ -109,8 +109,11 @@ func (p *Proxy) serveStatic(w http.ResponseWriter, r *http.Request) {
 	// Los assets con hash en el nombre se pueden cachear indefinidamente.
 	path := r.URL.Path
 	switch {
-	case path == "/sw.js" || strings.HasPrefix(path, "/workbox-"):
+	case path == "/sw.js" || path == "/sw-v2.js" || strings.HasPrefix(path, "/workbox-"):
 		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+		// Cloudflare-specific: evita que el edge de Cloudflare cachee el SW
+		// aunque "Edge Cache TTL" esté configurado globalmente.
+		w.Header().Set("Cloudflare-CDN-Cache-Control", "no-store")
 		w.Header().Set("Pragma", "no-cache")
 		w.Header().Set("Expires", "0")
 		w.Header().Set("Service-Worker-Allowed", "/")

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   approveAccessRequest,
@@ -7,6 +7,7 @@ import {
   listAccessRequests,
   listAccessUsers,
   rejectAccessRequest,
+  updateAccessUserStatus,
   type AccessRequest,
   type AccessRequestInput,
   type AccessUser,
@@ -34,6 +35,7 @@ function buildPersonalizedLink(accessCode: string): string {
 const emptyRequest: AccessRequestInput = {
   name: '',
   email: '',
+  phone: '',
   role: '',
   organization: '',
   message: '',
@@ -119,10 +121,28 @@ export function AccessPage() {
   const [directForm, setDirectForm] = useState({ name: '', email: '', role: '', organization: '', access_code: '' })
   const [lastDirectCreated, setLastDirectCreated] = useState<AccessUser | null>(null)
 
+  // Carga inicial desde localStorage
   useEffect(() => {
     setAdminToken(localStorage.getItem(ADMIN_TOKEN_KEY) ?? '')
     setAdminName(localStorage.getItem(ADMIN_NAME_KEY) ?? '')
   }, [])
+
+  // Auto-guarda el token en localStorage apenas cambia (con debounce de 600ms)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => {
+      if (adminToken.trim()) {
+        localStorage.setItem(ADMIN_TOKEN_KEY, adminToken.trim())
+      }
+      if (adminName.trim()) {
+        localStorage.setItem(ADMIN_NAME_KEY, adminName.trim())
+      }
+    }, 600)
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+    }
+  }, [adminToken, adminName])
 
   const adminReady = adminToken.trim().length > 0
 
@@ -196,6 +216,14 @@ export function AccessPage() {
       rejectAccessRequest(id, adminToken, { note, decidedBy: adminName }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['accessRequests'] })
+      queryClient.invalidateQueries({ queryKey: ['accessUsers'] })
+    },
+  })
+
+  const userStatusMutation = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: 'active' | 'disabled' }) =>
+      updateAccessUserStatus(id, status, adminToken, adminName),
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['accessUsers'] })
     },
   })
@@ -329,6 +357,13 @@ export function AccessPage() {
                 className="w-full rounded-lg border border-[rgba(56,139,253,0.3)] bg-[#0d1117] px-4 py-2 text-[#e6edf3] placeholder-muted focus:border-accent focus:outline-none"
               />
             </div>
+            <input
+              type="tel"
+              value={requestInput.phone ?? ''}
+              onChange={(event) => setRequestInput((prev) => ({ ...prev, phone: event.target.value }))}
+              placeholder="WhatsApp (ej: +5355512345) — para recibir tu código"
+              className="w-full rounded-lg border border-[rgba(56,139,253,0.3)] bg-[#0d1117] px-4 py-2 text-[#e6edf3] placeholder-muted focus:border-accent focus:outline-none"
+            />
             <div className="grid gap-3 sm:grid-cols-2">
               <input
                 value={requestInput.role}
@@ -396,8 +431,18 @@ export function AccessPage() {
             >
               Guardar configuración
             </button>
-            <div className="text-xs text-muted">
-              Estado: {adminReady ? 'Administrador configurado' : 'Token requerido para aprobar usuarios'}
+            <div className="flex items-center gap-2 text-xs text-muted">
+              {adminReady ? (
+                <>
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_4px_rgba(52,211,153,0.8)]" />
+                  <span className="text-emerald-300">Administrador configurado · auto-guardado</span>
+                </>
+              ) : (
+                <>
+                  <span className="w-2 h-2 rounded-full bg-amber-400" />
+                  <span className="text-amber-300">Token requerido para aprobar usuarios</span>
+                </>
+              )}
             </div>
           </div>
 
@@ -799,15 +844,17 @@ export function AccessPage() {
                 <tr className="border-b border-[rgba(56,139,253,0.2)]">
                   <th className="py-2 text-left">Usuario</th>
                   <th className="py-2 text-left">Rol</th>
+                  <th className="py-2 text-left">Código</th>
                   <th className="py-2 text-left">Estado</th>
-                  <th className="py-2 text-left">Enlace personalizado</th>
+                  <th className="py-2 text-left">Enlace</th>
                   <th className="py-2 text-left">Alta</th>
+                  <th className="py-2 text-left">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[rgba(56,139,253,0.1)]">
                 {(usersData?.items ?? []).map((user) => (
                   <tr key={user.id}>
-                    <td className="py-2">
+                    <td className="py-2 pr-3">
                       <div className="flex items-center gap-2">
                         {isOnline(user.last_seen) ? (
                           <span title="En línea ahora" className="flex-shrink-0 w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)] animate-pulse" />
@@ -825,22 +872,47 @@ export function AccessPage() {
                         )}
                       </div>
                     </td>
-                    <td className="py-2 text-muted">{user.role || '—'}</td>
-                    <td className="py-2">
+                    <td className="py-2 text-muted pr-3">{user.role || '—'}</td>
+                    <td className="py-2 pr-3">
+                      <div className="flex items-center gap-1.5">
+                        <span className="rounded-md border border-[rgba(56,139,253,0.3)] px-2 py-0.5 text-[11px] text-accent font-mono tracking-wider">
+                          {user.access_code}
+                        </span>
+                        <CopyButton value={user.access_code} label="Copiar" />
+                      </div>
+                    </td>
+                    <td className="py-2 pr-3">
                       <span className={`rounded-full border px-3 py-1 text-xs ${userStatusStyle(user.status)}`}>
                         {user.status === 'active' ? 'Activo' : 'Deshabilitado'}
                       </span>
                     </td>
-                    <td className="py-2">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="rounded-md border border-emerald-400/30 px-2 py-1 text-[10px] text-emerald-200 font-mono max-w-[140px] truncate" title={buildPersonalizedLink(user.access_code)}>
+                    <td className="py-2 pr-3">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="rounded-md border border-emerald-400/30 px-2 py-1 text-[10px] text-emerald-200 font-mono max-w-[120px] truncate" title={buildPersonalizedLink(user.access_code)}>
                           /?u={user.access_code}
                         </span>
-                        <CopyButton value={buildPersonalizedLink(user.access_code)} label="Copiar enlace" />
+                        <CopyButton value={buildPersonalizedLink(user.access_code)} label="Copiar" />
                       </div>
                     </td>
-                    <td className="py-2 text-xs text-muted" title={formatDate(user.created_at)}>
+                    <td className="py-2 text-xs text-muted pr-3" title={formatDate(user.created_at)}>
                       {relativeTime(user.created_at)}
+                    </td>
+                    <td className="py-2">
+                      <button
+                        type="button"
+                        disabled={userStatusMutation.isPending}
+                        onClick={() => userStatusMutation.mutate({
+                          id: user.id,
+                          status: user.status === 'active' ? 'disabled' : 'active',
+                        })}
+                        className={`rounded-lg px-2.5 py-1 text-xs font-medium transition disabled:opacity-40 ${
+                          user.status === 'active'
+                            ? 'bg-red-500/15 text-red-300 hover:bg-red-500/25'
+                            : 'bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25'
+                        }`}
+                      >
+                        {user.status === 'active' ? 'Deshabilitar' : 'Habilitar'}
+                      </button>
                     </td>
                   </tr>
                 ))}
