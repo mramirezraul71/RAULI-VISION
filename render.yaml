@@ -9,7 +9,11 @@ services:
     plan: starter
     branch: master
     rootDir: espejo
-    buildCommand: go mod download && go build -ldflags="-s -w" -o espejo ./cmd/server
+    buildCommand: >-
+      go mod download &&
+      go build -ldflags="-s -w" -o espejo ./cmd/server &&
+      curl -fsSL "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux"
+      -o yt-dlp && chmod +x yt-dlp
     startCommand: ./espejo
     disk:
       name: vault-storage
@@ -28,6 +32,19 @@ services:
         value: /var/data/vault
       - key: VAULT_ROTATION_DAYS
         value: "7"
+      - key: VAULT_SCAN_HOURS
+        value: "6"
+      - key: VAULT_SEED_INTERVAL_DAYS
+        value: "7"
+      # Configura las fuentes de contenido en el Dashboard de Render:
+      # VAULT_SEED_CAMI_MUSICA        — IDs/playlists YouTube para cami/musica (separados por coma)
+      # VAULT_SEED_CAMI_PELICULAS     — IDs/playlists YouTube para cami/peliculas
+      # VAULT_SEED_CAMI_MUSICVIDEOS   — IDs/playlists YouTube para cami/musicvideos
+      # VAULT_SEED_VARIADO_MUSICA     — IDs/playlists YouTube para variado/musica
+      # VAULT_SEED_VARIADO_PELICULAS  — IDs/playlists YouTube para variado/peliculas
+      # VAULT_SEED_VARIADO_MUSICVIDEOS — IDs/playlists YouTube para variado/musicvideos
+      - key: YTDLP_PATH
+        value: "./yt-dlp"
     healthCheckPath: /api/health
 
   - type: web
