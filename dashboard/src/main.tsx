@@ -28,6 +28,32 @@ async function clearLocalServiceWorkersAndCaches() {
 if (typeof window !== 'undefined') {
   window.addEventListener('load', () => {
     clearLocalServiceWorkersAndCaches()
+
+    // Producción: detectar nuevo SW y recargar automáticamente
+    if (!isLocalDev && 'serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistration().then((reg) => {
+        if (!reg) return
+        // SW ya instalado esperando activación → activar y recargar
+        if (reg.waiting) {
+          reg.waiting.postMessage({ type: 'SKIP_WAITING' })
+          window.location.reload()
+          return
+        }
+        reg.addEventListener('updatefound', () => {
+          const newWorker = reg.installing
+          if (!newWorker) return
+          newWorker.addEventListener('statechange', () => {
+            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+              newWorker.postMessage({ type: 'SKIP_WAITING' })
+              window.location.reload()
+            }
+          })
+        })
+      }).catch(() => {})
+
+      // Forzar chequeo de actualización en cada carga
+      navigator.serviceWorker.ready.then((reg) => reg.update()).catch(() => {})
+    }
   })
 }
 
