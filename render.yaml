@@ -1,6 +1,8 @@
 # RAULI-VISION — Render Blueprint
 # Espejo y Proxy: rootDir obligatorio para que Go resuelva módulo e internos en monorepo.
-# Rama: master (minúsculas). Tras el deploy, ESPEJO_URL debe apuntar a la URL del espejo.
+# IMPORTANTE: Render escucha la rama "master". Siempre pushear a AMBAS ramas:
+#   git push origin main && git push origin main:master
+# Los archivos estáticos del frontend van en cliente-local/static/ (gitignore bypass con git add -f)
 
 services:
   - type: web
