@@ -5,6 +5,7 @@ import {
   tiktokTrending, tiktokTrendingLive, tiktokSearch,
   type TikTokVideoInfo, type TikTokFeedItem,
 } from '../api/client'
+import { useVaultPlayer } from '../contexts/VaultPlayerContext'
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -96,11 +97,12 @@ function VideoCard({
 // ─── inline player ────────────────────────────────────────────────────────────
 
 function InlinePlayer({
-  item, proxyUrl, onClose,
+  item, proxyUrl, onClose, onEnded,
 }: {
   item: TikTokFeedItem
   proxyUrl: string
   onClose: () => void
+  onEnded: () => void
 }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   return (
@@ -146,6 +148,7 @@ function InlinePlayer({
           className="w-full bg-black"
           style={{ maxHeight: '70vh' }}
           playsInline
+          onEnded={onEnded}
         >
           Tu navegador no soporta video HTML5.
         </video>
@@ -563,10 +566,22 @@ export function TikTokPage() {
   const [tab, setTab] = useState<Tab>('trending')
   const [playing, setPlaying] = useState<TikTokFeedItem | null>(null)
   const [proxyUrl, setProxyUrl] = useState<string | null>(null)
+  const { pauseForExternal, resumeAfterExternal } = useVaultPlayer()
 
   const handlePlay = (item: TikTokFeedItem) => {
+    pauseForExternal()          // pausa la música si estaba sonando
     setPlaying(item)
     setProxyUrl(tiktokStreamUrl(item.stream_url))
+  }
+
+  const handleClose = () => {
+    setPlaying(null)
+    setProxyUrl(null)
+    resumeAfterExternal()       // reanuda música si fue pausada por nosotros
+  }
+
+  const handleEnded = () => {
+    handleClose()               // cierra el player y reanuda música
   }
 
   const handleUrlResult = (info: TikTokVideoInfo) => {
@@ -634,7 +649,8 @@ export function TikTokPage() {
         <InlinePlayer
           item={playing}
           proxyUrl={proxyUrl}
-          onClose={() => { setPlaying(null); setProxyUrl(null) }}
+          onClose={handleClose}
+          onEnded={handleEnded}
         />
       )}
 

@@ -15,6 +15,10 @@ export interface VaultPlayerContextType {
   shuffleOn: boolean
   play: (item: VaultItem, catalogItems?: VaultItem[]) => void
   togglePlay: () => void
+  /** Pausa externamente (ej. TikTok abre). Recordará si había algo sonando. */
+  pauseForExternal: () => void
+  /** Reanuda solo si fue pausado por pauseForExternal (no si el usuario pausó manualmente). */
+  resumeAfterExternal: () => void
   stop: () => void
   next: () => void
   toggleShuffle: () => void
@@ -45,10 +49,11 @@ export function VaultPlayerProvider({ children }: { children: ReactNode }) {
   const [shuffleOn, setShuffleOn]     = useState(true)
 
   // Refs sobreviven renders sin causar re-renders
-  const audioRef     = useRef<HTMLAudioElement | null>(null)
-  const catalogRef   = useRef<VaultItem[]>([])          // catálogo de música actual
-  const historyRef   = useRef(new Set<string>())        // ids reproducidos recientemente
-  const onEndedRef   = useRef<() => void>(() => {})
+  const audioRef          = useRef<HTMLAudioElement | null>(null)
+  const catalogRef        = useRef<VaultItem[]>([])          // catálogo de música actual
+  const historyRef        = useRef(new Set<string>())        // ids reproducidos recientemente
+  const onEndedRef        = useRef<() => void>(() => {})
+  const externalPauseRef  = useRef(false)                    // pausado por agente externo (TikTok, etc.)
 
   // ── Actualizar catálogo interno (solo pistas de música) ─────────────────────
   const updateCatalog = useCallback((items: VaultItem[]) => {
@@ -116,6 +121,25 @@ export function VaultPlayerProvider({ children }: { children: ReactNode }) {
 
   const toggleShuffle = useCallback(() => setShuffleOn(v => !v), [])
 
+  // Pausa solicitada por un agente externo (TikTok, video, etc.)
+  const pauseForExternal = useCallback(() => {
+    const audio = audioRef.current
+    if (audio && !audio.paused) {
+      externalPauseRef.current = true
+      audio.pause()
+    }
+  }, [])
+
+  // Reanuda solo si fue pausado por pauseForExternal
+  const resumeAfterExternal = useCallback(() => {
+    if (!externalPauseRef.current) return
+    externalPauseRef.current = false
+    const audio = audioRef.current
+    if (audio && currentItem) {
+      audio.play().catch(() => {})
+    }
+  }, [currentItem])
+
   const playRandomFrom = useCallback((items: VaultItem[]) => {
     const musicItems = items.filter(i => i.category === 'musica')
     const pool = musicItems.length > 0 ? musicItems : items.filter(i => i.category === 'musica')
@@ -126,7 +150,7 @@ export function VaultPlayerProvider({ children }: { children: ReactNode }) {
   }, [doPlay, updateCatalog])
 
   return (
-    <Ctx.Provider value={{ currentItem, isPlaying, shuffleOn, play, togglePlay, stop, next, toggleShuffle, updateCatalog, playRandomFrom }}>
+    <Ctx.Provider value={{ currentItem, isPlaying, shuffleOn, play, togglePlay, pauseForExternal, resumeAfterExternal, stop, next, toggleShuffle, updateCatalog, playRandomFrom }}>
       {children}
     </Ctx.Provider>
   )
