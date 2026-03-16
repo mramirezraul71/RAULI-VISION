@@ -12,6 +12,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -50,14 +51,16 @@ type CatalogResponse struct {
 
 // StatusResponse es la respuesta de GET /api/vault/admin/status
 type StatusResponse struct {
-	OK           bool   `json:"ok"`
-	VaultRoot    string `json:"vault_root"`
-	TotalItems   int    `json:"total_items"`
-	ActiveItems  int    `json:"active_items"`
-	TotalSizeGB  float64 `json:"total_size_gb"`
-	ActiveSlot   string `json:"active_slot"`
-	NextRotation string `json:"next_rotation"`
-	DBPath       string `json:"db_path"`
+	OK            bool    `json:"ok"`
+	VaultRoot     string  `json:"vault_root"`
+	TotalItems    int     `json:"total_items"`
+	ActiveItems   int     `json:"active_items"`
+	TotalSizeGB   float64 `json:"total_size_gb"`
+	ActiveSlot    string  `json:"active_slot"`
+	NextRotation  string  `json:"next_rotation"`
+	DBPath        string  `json:"db_path"`
+	YtdlpVersion  string  `json:"ytdlp_version,omitempty"`
+	YtdlpPath     string  `json:"ytdlp_path,omitempty"`
 }
 
 // Service es el servicio principal del Vault.
@@ -475,6 +478,14 @@ func (s *Service) HandleAdminStatus(w http.ResponseWriter, r *http.Request) {
 	nextRot := time.Now().AddDate(0, 0, s.rotationDays).Format("2006-01-02")
 	_ = yr + wk // evitar unused
 
+	ytPath := resolveYtdlp()
+	ytVer := ""
+	if ytPath != "" {
+		if out, err := exec.Command(ytPath, "--version").Output(); err == nil {
+			ytVer = strings.TrimSpace(string(out))
+		}
+	}
+
 	writeJSON(w, http.StatusOK, StatusResponse{
 		OK:           true,
 		VaultRoot:    s.vaultRoot,
@@ -484,6 +495,8 @@ func (s *Service) HandleAdminStatus(w http.ResponseWriter, r *http.Request) {
 		ActiveSlot:   slot,
 		NextRotation: nextRot,
 		DBPath:       filepath.Join(s.vaultRoot, "vault.db"),
+		YtdlpPath:    ytPath,
+		YtdlpVersion: ytVer,
 	})
 }
 
