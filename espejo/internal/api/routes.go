@@ -57,6 +57,7 @@ func Register(mux *http.ServeMux, version string, authSvc *auth.Service, searchS
 	// Vault — catálogo de contenido offline (2 canales: cami + variado)
 	vaultSvc := vault.New(adminToken)
 	vaultSvc.StartRotationWorker()
+	vaultSvc.StartScanWorker() // auto-indexa archivos colocados en VAULT_ROOT
 
 	h := &Handlers{
 		Auth:       authSvc,
