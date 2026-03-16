@@ -1,7 +1,9 @@
 const ENV_BASE = (import.meta.env.VITE_API_URL ?? '').replace(/\/+$/, '')
-const PRIMARY_BASE = ENV_BASE ? `${ENV_BASE}/api/vault` : '/api/vault'
-// Fallback: /vault pasa por el proxy cliente-local que reescribe a /api/vault internamente
-const FALLBACK_BASES = ['/api/vault', '/vault']
+// En producción (Vercel): /vault/* → espejo-backend directamente (sin pasar por proxy-backend)
+// En local (Vite dev): /vault/* → localhost:3000 → espejo local
+// ENV_BASE (proxy-backend) queda como último fallback por si el rewrite de Vercel falla
+const PRIMARY_BASE = '/vault'
+const FALLBACK_BASES = ['/api/vault', ...(ENV_BASE ? [`${ENV_BASE}/api/vault`] : [])]
 // 401 NO es reintentable — significa que el usuario no está autorizado, no un error de red
 const RETRYABLE_STATUS = new Set([404, 502, 503, 504])
 
