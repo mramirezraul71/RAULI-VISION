@@ -128,6 +128,14 @@ func downloadTarget(ytdlpPath, target, destDir, archivePath, category string, ma
 		"--quiet",
 		"--no-warnings",
 		"--retries", "3",
+		// Usar cliente web para compatibilidad mejorada
+		"--extractor-args", "youtube:player_client=web",
+		// Limitar enumeración de playlist/canal para evitar timeouts
+		"--playlist-end", "30",
+		// No abortar todo el canal si un video individual falla
+		"--ignore-errors",
+		// Evitar fragmentos que requieren autenticación
+		"--no-part",
 	}
 	if maxItems > 0 {
 		args = append(args, "--max-downloads", fmt.Sprintf("%d", maxItems))
@@ -139,16 +147,20 @@ func downloadTarget(ytdlpPath, target, destDir, archivePath, category string, ma
 			"--extract-audio",
 			"--audio-format", "mp3",
 			"--audio-quality", "5", // ~128 kbps
+			// Para canales de audio: preferir fuentes sin DRM
+			"--format", "bestaudio/best",
 		)
 	case "musicvideo":
 		args = append(args,
-			"--format", "bestvideo[height<=480]+bestaudio/best[height<=480]",
+			"--format", "bestvideo[height<=480][vcodec!^=av01]+bestaudio/best[height<=480]",
 			"--merge-output-format", "mp4",
 		)
 	case "pelicula":
 		args = append(args,
-			"--format", "bestvideo[height<=720]+bestaudio/best[height<=720]",
+			"--format", "bestvideo[height<=480][vcodec!^=av01]+bestaudio/best[height<=480]",
 			"--merge-output-format", "mp4",
+			// Peliculas: limitar a 120 min para evitar archivos enormes
+			"--match-filter", "duration < 7200",
 		)
 	}
 
