@@ -80,6 +80,12 @@ func (h *Handlers) GetVaultStatus(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) DeleteVaultItem(w http.ResponseWriter, r *http.Request) {
 	h.Vault.HandleAdminDelete(w, r)
 }
+func (h *Handlers) PostVaultSeed(w http.ResponseWriter, r *http.Request) {
+	h.Vault.HandleAdminSeed(w, r)
+}
+func (h *Handlers) PostVaultScan(w http.ResponseWriter, r *http.Request) {
+	h.Vault.HandleAdminScan(w, r)
+}
 
 func (h *Handlers) GetDigest(w http.ResponseWriter, r *http.Request)          { h.Digest.HandleDigest(w, r) }
 func (h *Handlers) GetDigestHistory(w http.ResponseWriter, r *http.Request)   { h.Digest.HandleDigestHistory(w, r) }

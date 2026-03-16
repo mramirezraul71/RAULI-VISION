@@ -517,6 +517,35 @@ func (s *Service) HandleAdminDelete(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "deleted": id})
 }
 
+// HandleAdminSeed sirve POST /api/vault/admin/seed — dispara el seeder en segundo plano.
+func (s *Service) HandleAdminSeed(w http.ResponseWriter, r *http.Request) {
+	if !s.requireAdmin(r) {
+		writeJSON(w, http.StatusUnauthorized, map[string]any{"ok": false, "error": "no autorizado"})
+		return
+	}
+	go func() {
+		targets := collectSeedTargets()
+		ytdlpPath := resolveYtdlp()
+		if ytdlpPath == "" || len(targets) == 0 {
+			log.Printf("⚠️  Vault admin/seed: yt-dlp no disponible o sin targets")
+			return
+		}
+		maxPerRun := 8
+		s.runAllSeeds(ytdlpPath, targets, maxPerRun)
+	}()
+	writeJSON(w, http.StatusAccepted, map[string]any{"ok": true, "message": "seed iniciado en segundo plano"})
+}
+
+// HandleAdminScan sirve POST /api/vault/admin/scan — fuerza un re-escaneo inmediato.
+func (s *Service) HandleAdminScan(w http.ResponseWriter, r *http.Request) {
+	if !s.requireAdmin(r) {
+		writeJSON(w, http.StatusUnauthorized, map[string]any{"ok": false, "error": "no autorizado"})
+		return
+	}
+	go s.scanOnce()
+	writeJSON(w, http.StatusAccepted, map[string]any{"ok": true, "message": "escaneo iniciado en segundo plano"})
+}
+
 // applyRotation activa el slot indicado y desactiva el resto (solo para peliculas con slot asignado).
 func (s *Service) applyRotation(slot string) error {
 	s.mu.Lock()

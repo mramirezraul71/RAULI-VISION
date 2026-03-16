@@ -202,6 +202,8 @@ func Register(mux *http.ServeMux, version string, authSvc *auth.Service, searchS
 	mux.HandleFunc("POST /api/vault/admin/rotate",  rateWrap(logWrap(h.PostVaultRotate)))
 	mux.HandleFunc("GET /api/vault/admin/status",   rateWrap(logWrap(h.GetVaultStatus)))
 	mux.HandleFunc("DELETE /api/vault/admin/item/", rateWrap(logWrap(h.DeleteVaultItem)))
+	mux.HandleFunc("POST /api/vault/admin/seed",    rateWrap(logWrap(h.PostVaultSeed)))
+	mux.HandleFunc("POST /api/vault/admin/scan",    rateWrap(logWrap(h.PostVaultScan)))
 }
 
 func (h *Handlers) getSearch(w http.ResponseWriter, r *http.Request)      { h.GetSearch(w, r) }

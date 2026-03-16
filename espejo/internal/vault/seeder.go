@@ -144,24 +144,20 @@ func downloadTarget(ytdlpPath, target, destDir, archivePath, category string, ma
 	switch category {
 	case "musica":
 		args = append(args,
+			"--format", "bestaudio/best",
 			"--extract-audio",
 			"--audio-format", "mp3",
 			"--audio-quality", "5", // ~128 kbps
-			// Para canales de audio: preferir fuentes sin DRM
-			"--format", "bestaudio/best",
 		)
-	case "musicvideo":
+	case "musicvideo", "pelicula":
+		// best[ext=mp4] descarga un MP4 pre-mergeado sin necesitar ffmpeg.
+		// Fallback a best[height<=480] si no hay MP4 simple disponible.
 		args = append(args,
-			"--format", "bestvideo[height<=480][vcodec!^=av01]+bestaudio/best[height<=480]",
-			"--merge-output-format", "mp4",
+			"--format", "best[ext=mp4][height<=480]/best[height<=480]/best",
 		)
-	case "pelicula":
-		args = append(args,
-			"--format", "bestvideo[height<=480][vcodec!^=av01]+bestaudio/best[height<=480]",
-			"--merge-output-format", "mp4",
-			// Peliculas: limitar a 120 min para evitar archivos enormes
-			"--match-filter", "duration < 7200",
-		)
+		if category == "pelicula" {
+			args = append(args, "--match-filter", "duration < 7200")
+		}
 	}
 
 	args = append(args, "--", target)
