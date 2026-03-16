@@ -421,27 +421,36 @@ function EmptyState({ channel, category, query }: {
   query: string
 }) {
   const isFiltered = category !== 'all' || query
+  const catLabel = { pelicula: 'películas', musica: 'música', musicvideo: 'videoclips', all: 'contenido' }[category]
   return (
     <div style={{ textAlign: 'center', padding: '48px 16px' }}>
       <div style={{ fontSize: 48, marginBottom: 12 }}>
-        {isFiltered ? '🔍' : channel === 'cami' ? '✝️' : '🎭'}
+        {isFiltered ? '🔍' : '📭'}
       </div>
-      <div style={{ fontWeight: 600, fontSize: 16, color: '#94a3b8', marginBottom: 6 }}>
-        {isFiltered ? 'Sin resultados' : 'Canal vacío'}
+      <div style={{ fontWeight: 600, fontSize: 16, color: '#94a3b8', marginBottom: 8 }}>
+        {isFiltered ? 'Sin resultados' : 'Aún no hay contenido aquí'}
       </div>
-      <div style={{ fontSize: 13, color: '#475569', maxWidth: 300, margin: '0 auto' }}>
+      <div style={{ fontSize: 13, color: '#475569', maxWidth: 320, margin: '0 auto', lineHeight: 1.6 }}>
         {isFiltered
-          ? 'Prueba con otros filtros o términos de búsqueda.'
-          : `El ${CHANNEL_LABELS[channel].label} aún no tiene contenido cargado. El administrador puede subir archivos vía la API del Vault.`
+          ? `No encontramos ${catLabel} con esos filtros. Prueba con otros términos o cambia la categoría.`
+          : `El ${CHANNEL_LABELS[channel].label} está preparado para recibir contenido. El sistema lo cargará automáticamente en breve.`
         }
       </div>
       {!isFiltered && (
         <div style={{
-          marginTop: 20, background: '#1a1d2e', borderRadius: 10, padding: '12px 16px',
-          display: 'inline-block', textAlign: 'left', fontSize: 12, color: '#475569',
+          marginTop: 20, display: 'flex', justifyContent: 'center', gap: 8, flexWrap: 'wrap',
         }}>
-          <code>POST /api/vault/admin/upload</code>
-          <div style={{ marginTop: 4 }}>Sube películas, música y videoclips al catálogo</div>
+          {(['pelicula', 'musica', 'musicvideo'] as VaultCategory[]).map(cat => (
+            <div key={cat} style={{
+              background: '#161922', border: '1px solid #1e2435', borderRadius: 10,
+              padding: '10px 16px', fontSize: 12, color: '#475569', textAlign: 'center',
+            }}>
+              <div style={{ fontSize: 22, marginBottom: 4 }}>
+                {{ pelicula: '🎬', musica: '🎵', musicvideo: '🎥' }[cat]}
+              </div>
+              {{ pelicula: 'Películas', musica: 'Música', musicvideo: 'Videoclips' }[cat]}
+            </div>
+          ))}
         </div>
       )}
     </div>
