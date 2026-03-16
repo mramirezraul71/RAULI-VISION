@@ -18,11 +18,11 @@
   "rewrites": [
     { "source": "/owner/:path*", "destination": "https://espejo-backend.onrender.com/api/owner/:path*" },
     { "source": "/vault/:path*", "destination": "https://espejo-backend.onrender.com/api/vault/:path*" },
-    { "source": "/api/:path*", "destination": "https://proxy-backend.onrender.com/api/:path*" },
-    { "source": "/auth/:path*", "destination": "https://proxy-backend.onrender.com/auth/:path*" },
+    { "source": "/api/:path*", "destination": "https://proxy-backend-5lwl.onrender.com/api/:path*" },
+    { "source": "/auth/:path*", "destination": "https://proxy-backend-5lwl.onrender.com/auth/:path*" },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
-  "env": { "VITE_API_URL": "https://proxy-backend.onrender.com" },
+  "env": { "VITE_API_URL": "https://proxy-backend-5lwl.onrender.com" },
   "headers": [
     {
       "source": "/api/(.*)",
