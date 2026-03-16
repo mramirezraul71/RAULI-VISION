@@ -104,6 +104,20 @@ func (p *Proxy) serveStatic(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	// Inyectar Cache-Control antes de que http.FileServer escriba los headers.
+	// sw.js y workbox-*.js NUNCA deben cachearse (ni por Cloudflare ni por el browser).
+	// Los assets con hash en el nombre se pueden cachear indefinidamente.
+	path := r.URL.Path
+	switch {
+	case path == "/sw.js" || strings.HasPrefix(path, "/workbox-"):
+		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+		w.Header().Set("Pragma", "no-cache")
+		w.Header().Set("Expires", "0")
+		w.Header().Set("Service-Worker-Allowed", "/")
+	case strings.HasPrefix(path, "/assets/"):
+		// Hashes en el nombre → inmutables
+		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	}
 	http.FileServer(p.static).ServeHTTP(w, r)
 }
 
