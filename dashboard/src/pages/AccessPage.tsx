@@ -121,10 +121,17 @@ export function AccessPage() {
   const [directForm, setDirectForm] = useState({ name: '', email: '', role: '', organization: '', access_code: '' })
   const [lastDirectCreated, setLastDirectCreated] = useState<AccessUser | null>(null)
 
-  // Carga inicial desde localStorage
+  // Carga inicial desde localStorage — si no hay token, usa el de sistema y lo persiste
   useEffect(() => {
-    setAdminToken(localStorage.getItem(ADMIN_TOKEN_KEY) ?? '')
-    setAdminName(localStorage.getItem(ADMIN_NAME_KEY) ?? '')
+    const saved = localStorage.getItem(ADMIN_TOKEN_KEY)
+    const token = saved && saved.trim() ? saved.trim() : 'rauli-admin-local'
+    const name  = localStorage.getItem(ADMIN_NAME_KEY) ?? 'Rauli'
+    setAdminToken(token)
+    setAdminName(name)
+    if (!saved || !saved.trim()) {
+      localStorage.setItem(ADMIN_TOKEN_KEY, token)
+      localStorage.setItem(ADMIN_NAME_KEY, name)
+    }
   }, [])
 
   // Auto-guarda el token en localStorage apenas cambia (con debounce de 600ms)
