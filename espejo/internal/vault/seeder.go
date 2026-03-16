@@ -128,8 +128,8 @@ func downloadTarget(ytdlpPath, target, destDir, archivePath, category string, ma
 		"--quiet",
 		"--no-warnings",
 		"--retries", "3",
-		// Usar cliente web para compatibilidad mejorada
-		"--extractor-args", "youtube:player_client=web",
+		// iOS player client: no requiere po-token desde IPs de server (cloud)
+		"--extractor-args", "youtube:player_client=ios,web",
 		// Limitar enumeración de playlist/canal para evitar timeouts
 		"--playlist-end", "30",
 		// No abortar todo el canal si un video individual falla
