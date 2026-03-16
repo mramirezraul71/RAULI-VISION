@@ -21,17 +21,18 @@ type seedTarget struct {
 //
 // Variables de entorno por canal y categoría:
 //
-//	VAULT_SEED_CAMI_MUSICA        — IDs/URLs YouTube para cami/musica
-//	VAULT_SEED_CAMI_PELICULAS     — IDs/URLs YouTube para cami/peliculas
-//	VAULT_SEED_CAMI_MUSICVIDEOS   — IDs/URLs YouTube para cami/musicvideos
-//	VAULT_SEED_VARIADO_MUSICA     — IDs/URLs YouTube para variado/musica
-//	VAULT_SEED_VARIADO_PELICULAS  — IDs/URLs YouTube para variado/peliculas
+//	VAULT_SEED_CAMI_MUSICA         — IDs/URLs YouTube para cami/musica
+//	VAULT_SEED_CAMI_PELICULAS      — IDs/URLs YouTube para cami/peliculas
+//	VAULT_SEED_CAMI_MUSICVIDEOS    — IDs/URLs YouTube para cami/musicvideos
+//	VAULT_SEED_VARIADO_MUSICA      — IDs/URLs YouTube para variado/musica
+//	VAULT_SEED_VARIADO_PELICULAS   — IDs/URLs YouTube para variado/peliculas
 //	VAULT_SEED_VARIADO_MUSICVIDEOS — IDs/URLs YouTube para variado/musicvideos
 //
 // Cada variable acepta IDs de video, playlists y URLs de canal, separados por comas.
 //
-//	VAULT_SEED_INTERVAL_DAYS — días entre re-descargas (default: 7)
-//	YTDLP_PATH               — ruta al binario yt-dlp (default: ./yt-dlp)
+//	VAULT_SEED_INTERVAL_DAYS  — días entre re-descargas (default: 7)
+//	VAULT_SEED_MAX_PER_RUN    — máx nuevas descargas por categoría por ejecución (default: 10)
+//	YTDLP_PATH                — ruta al binario yt-dlp (default: ./yt-dlp)
 func (s *Service) StartSeedWorker() {
 	targets := collectSeedTargets()
 	if len(targets) == 0 {
@@ -52,23 +53,31 @@ func (s *Service) StartSeedWorker() {
 		}
 	}
 
-	log.Printf("🎬 Vault seeder activo: %d configuración(es), intervalo=%dd, yt-dlp=%s",
-		len(targets), intervalDays, ytdlpPath)
+	maxPerRun := 10
+	if v := strings.TrimSpace(os.Getenv("VAULT_SEED_MAX_PER_RUN")); v != "" {
+		var n int
+		if _, err := fmt.Sscanf(v, "%d", &n); err == nil && n > 0 {
+			maxPerRun = n
+		}
+	}
+
+	log.Printf("🎬 Vault seeder activo: %d configuración(es), intervalo=%dd, max=%d/cat, yt-dlp=%s",
+		len(targets), intervalDays, maxPerRun, ytdlpPath)
 
 	go func() {
 		time.Sleep(15 * time.Second) // esperar init del sistema
-		s.runAllSeeds(ytdlpPath, targets)
+		s.runAllSeeds(ytdlpPath, targets, maxPerRun)
 
 		ticker := time.NewTicker(time.Duration(intervalDays) * 24 * time.Hour)
 		defer ticker.Stop()
 		for range ticker.C {
-			s.runAllSeeds(ytdlpPath, targets)
+			s.runAllSeeds(ytdlpPath, targets, maxPerRun)
 		}
 	}()
 }
 
 // runAllSeeds ejecuta el seeder para cada canal/categoría configurado.
-func (s *Service) runAllSeeds(ytdlpPath string, targets []seedTarget) {
+func (s *Service) runAllSeeds(ytdlpPath string, targets []seedTarget, maxPerRun int) {
 	if s.db == nil {
 		return
 	}
@@ -84,7 +93,7 @@ func (s *Service) runAllSeeds(ytdlpPath string, targets []seedTarget) {
 		beforeCount := countMediaFiles(destDir)
 
 		for _, target := range t.ids {
-			if err := downloadTarget(ytdlpPath, target, destDir, archivePath, t.category); err != nil {
+			if err := downloadTarget(ytdlpPath, target, destDir, archivePath, t.category, maxPerRun); err != nil {
 				log.Printf("⚠️  Vault seeder [%s/%s %s]: %v", t.channel, t.category, target, err)
 			}
 		}
@@ -104,7 +113,8 @@ func (s *Service) runAllSeeds(ytdlpPath string, targets []seedTarget) {
 }
 
 // downloadTarget llama a yt-dlp para un video, playlist o URL de canal.
-func downloadTarget(ytdlpPath, target, destDir, archivePath, category string) error {
+// maxItems limita las descargas nuevas por ejecución (0 = sin límite).
+func downloadTarget(ytdlpPath, target, destDir, archivePath, category string, maxItems int) error {
 	if isVideoID(target) {
 		target = "https://www.youtube.com/watch?v=" + target
 	}
@@ -118,6 +128,9 @@ func downloadTarget(ytdlpPath, target, destDir, archivePath, category string) er
 		"--quiet",
 		"--no-warnings",
 		"--retries", "3",
+	}
+	if maxItems > 0 {
+		args = append(args, "--max-downloads", fmt.Sprintf("%d", maxItems))
 	}
 
 	switch category {
