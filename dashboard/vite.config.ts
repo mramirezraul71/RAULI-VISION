@@ -13,9 +13,24 @@ export default defineConfig({
       filename: 'sw-v2.js',
       devOptions: { enabled: false },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
+        // index.html EXCLUIDO del precache → siempre va a red
+        globPatterns: ['**/*.{js,css,ico,png,svg}'],
         skipWaiting: true,
         clientsClaim: true,
+        // Desactiva el NavigationRoute automático que servía index.html cacheado
+        navigateFallback: null,
+        // Navegación: NetworkFirst → index.html siempre fresco desde red
+        runtimeCaching: [
+          {
+            urlPattern: ({ request }: { request: Request }) => request.mode === 'navigate',
+            handler: 'NetworkFirst' as const,
+            options: {
+              cacheName: 'navigation-cache',
+              networkTimeoutSeconds: 3,
+              expiration: { maxEntries: 1 },
+            },
+          },
+        ],
       },
       manifest: {
         name: 'RAULI-VISION',
