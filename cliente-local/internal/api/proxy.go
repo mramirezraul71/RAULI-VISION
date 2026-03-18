@@ -131,11 +131,14 @@ func (p *Proxy) serveAPI(w http.ResponseWriter, r *http.Request) {
 			strings.HasSuffix(r.URL.Path, "/channels/health"))
 	// Tendencias TikTok: el espejo las refresca cada 3 min internamente — no cachear en proxy
 	isTikTokLive := r.URL.Path == "/api/tiktok/trending" || strings.HasPrefix(r.URL.Path, "/api/tiktok/trending")
+	// Vault catalog: contenido que el owner puede actualizar en cualquier momento — no cachear para evitar datos obsoletos
+	isVaultCatalog := r.URL.Path == "/api/vault/catalog"
 	cacheable := r.Method == http.MethodGet &&
 		r.URL.Path != "/api/health" &&
 		!strings.HasPrefix(r.URL.Path, "/api/access") &&
 		!isDynamicVideoPath &&
-		!isTikTokLive
+		!isTikTokLive &&
+		!isVaultCatalog
 	cacheKey := ""
 	if cacheable {
 		cacheKey = cache.CacheKey(r.Method, r.URL.Path, r.URL.RawQuery)

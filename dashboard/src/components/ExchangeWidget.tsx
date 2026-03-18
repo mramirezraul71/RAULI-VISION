@@ -14,8 +14,14 @@ interface DivisasResponse {
   cached_at: string
 }
 
+function userToken(): string {
+  try { return localStorage.getItem('rauli_user_token') ?? '' } catch { return '' }
+}
+
 async function fetchDivisas(): Promise<DivisasResponse> {
-  const r = await fetch('/api/divisas')
+  const u = userToken()
+  const url = u ? `/api/divisas?u=${encodeURIComponent(u)}` : '/api/divisas'
+  const r = await fetch(url)
   if (!r.ok) throw new Error('divisas_error')
   return r.json()
 }

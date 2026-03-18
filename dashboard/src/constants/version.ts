@@ -1,7 +1,13 @@
 export const APP_VERSION =
-  typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '1.3.1'
+  typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '1.3.6'
 
-export const CHANGELOG = `## v1.3.1 — RAULI Vault
+export const CHANGELOG = `## v1.3.6 — Fixes móvil
+• Bóveda: corregido error de autenticación en móvil (token inyectado en peticiones al servidor)
+• Divisas: corregido error 401 en widget de tasas de cambio
+• SW: cache-buster en index.html garantiza código fresco al detectar nueva versión
+• SW: eliminada NavigationRoute obsoleta — index.html siempre desde red (NetworkFirst)
+
+## v1.3.1 — RAULI Vault
 • Vault: nueva sección de contenido offline (Canal CAMI + Canal Variado)
 • Películas, música MP3 y videoclips disponibles sin conexión
 • Rotación automática semanal de películas por slots A/B/C/D
