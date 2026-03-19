@@ -1,7 +1,15 @@
 export const APP_VERSION =
-  typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '1.3.6'
+  typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '1.3.7'
 
-export const CHANGELOG = `## v1.3.6 — Fixes móvil
+export const CHANGELOG = `## v1.3.7 — Vault rediseñado
+• Bóveda: reproductor con barra de progreso, botón anterior y controles completos
+• Bóveda: video en MP4 — compatible con iOS Safari (sin errores de conexión)
+• Bóveda: tarjetas rediseñadas con badge de formato, vista lista/grid, Sort A-Z
+• Bóveda: banner "Reproduciendo" con controles en la misma página
+• Bóveda: contenido de mayor calidad (música y películas en español)
+• Proxy: headers CDN no-cache para forzar versión fresca en Cloudflare
+
+## v1.3.6 — Fixes móvil
 • Bóveda: corregido error de autenticación en móvil (token inyectado en peticiones al servidor)
 • Divisas: corregido error 401 en widget de tasas de cambio
 • SW: cache-buster en index.html garantiza código fresco al detectar nueva versión

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useRegisterSW } from 'virtual:pwa-register/react'
 import { getHealth } from './api/client'
@@ -426,12 +426,21 @@ function AppContent() {
 // ─── Mini-player persistente de música ────────────────────────────────────────
 // Aparece sobre la barra de navegación en móvil (bottom-14 = 56px) y
 // al borde inferior en escritorio (bottom-0).
+// v2: barra de progreso, botón anterior, altura 72px.
 function VaultMiniPlayer() {
-  const { currentItem, isPlaying, shuffleOn, togglePlay, stop, next, toggleShuffle } = useVaultPlayer()
+  const { currentItem, isPlaying, shuffleOn, progress, duration, togglePlay, stop, next, prev, seek, toggleShuffle } = useVaultPlayer()
   if (!currentItem) return null
 
   const chColor = currentItem.channel === 'cami' ? '#a78bfa' : '#38bdf8'
-  const chLabel = currentItem.channel === 'cami' ? '✝️' : '🎭'
+  const chLabel = currentItem.channel === 'cami' ? '✝' : '★'
+
+  const handleBarClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    seek((e.clientX - rect.left) / rect.width)
+  }
+
+  const elapsed = duration > 0 ? Math.floor(duration * progress) : 0
+  const fmt = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 
   return (
     <>
@@ -443,72 +452,101 @@ function VaultMiniPlayer() {
           background: 'rgba(13,17,23,0.97)',
           borderTop: `2px solid ${chColor}66`,
           backdropFilter: 'blur(12px)',
-          padding: '0 16px',
-          height: 60,
+          padding: '8px 16px 6px',
+          height: 72,
           display: 'flex',
-          alignItems: 'center',
-          gap: 12,
+          flexDirection: 'column',
+          justifyContent: 'center',
+          gap: 4,
         }}
       >
-        {/* Acento de color */}
-        <div style={{ width: 4, height: 36, borderRadius: 2, background: chColor, flexShrink: 0 }} />
+        {/* Fila principal: acento + info + controles */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {/* Acento de color */}
+          <div style={{ width: 4, height: 32, borderRadius: 2, background: chColor, flexShrink: 0 }} />
 
-        {/* Canal + info de pista */}
-        <div style={{ fontSize: 20, flexShrink: 0 }}>{chLabel}</div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: '#f1f5f9', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {currentItem.title}
-          </div>
-          {currentItem.artist && (
-            <div style={{ fontSize: 11, color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {currentItem.artist}
+          {/* Canal + info de pista */}
+          <div style={{ fontSize: 16, flexShrink: 0 }}>{chLabel}</div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: '#f1f5f9', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: 1.3 }}>
+              {currentItem.title}
             </div>
-          )}
+            {currentItem.artist && (
+              <div style={{ fontSize: 10, color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {currentItem.artist}
+              </div>
+            )}
+          </div>
+
+          {/* Controles */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
+
+            {/* Shuffle on/off */}
+            <button onClick={toggleShuffle} title={shuffleOn ? 'Aleatorio: ON' : 'Aleatorio: OFF'}
+              style={{ background: shuffleOn ? `${chColor}25` : 'none', border: `1px solid ${shuffleOn ? chColor : '#2a3448'}`, borderRadius: 6, width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: shuffleOn ? chColor : '#475569', transition: 'all 0.15s' }}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} width="13" height="13">
+                <polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/>
+                <polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/>
+                <line x1="4" y1="4" x2="9" y2="9"/>
+              </svg>
+            </button>
+
+            {/* Anterior */}
+            <button onClick={prev} title="Anterior"
+              style={{ background: 'none', border: '1px solid #2a3448', borderRadius: 6, width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#64748b', transition: 'all 0.15s' }}>
+              <svg viewBox="0 0 24 24" fill="currentColor" width="13" height="13">
+                <line x1="5" y1="4" x2="5" y2="20" stroke="currentColor" strokeWidth={2} fill="none"/>
+                <polygon points="19 4 9 12 19 20 19 4"/>
+              </svg>
+            </button>
+
+            {/* Play / Pause */}
+            <button onClick={togglePlay} title={isPlaying ? 'Pausar' : 'Continuar'}
+              style={{ background: chColor, border: 'none', borderRadius: '50%', width: 38, height: 38, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#0f1117', flexShrink: 0, boxShadow: `0 0 10px ${chColor}55` }}>
+              {isPlaying ? (
+                <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
+                  <rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>
+                </svg>
+              ) : (
+                <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
+                  <polygon points="5 3 19 12 5 21 5 3"/>
+                </svg>
+              )}
+            </button>
+
+            {/* Siguiente */}
+            <button onClick={next} title="Siguiente aleatoria"
+              style={{ background: 'none', border: '1px solid #2a3448', borderRadius: 6, width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#64748b', transition: 'all 0.15s' }}>
+              <svg viewBox="0 0 24 24" fill="currentColor" width="13" height="13">
+                <polygon points="5 4 15 12 5 20 5 4"/>
+                <line x1="19" y1="5" x2="19" y2="19" stroke="currentColor" strokeWidth={2} fill="none"/>
+              </svg>
+            </button>
+
+            {/* Detener / Desconectar */}
+            <button onClick={stop} title="Detener y desconectar"
+              style={{ background: 'none', border: '1px solid #3f1515', borderRadius: 6, width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#ef4444', transition: 'all 0.15s' }}>
+              <svg viewBox="0 0 24 24" fill="currentColor" width="11" height="11">
+                <rect x="3" y="3" width="18" height="18" rx="2"/>
+              </svg>
+            </button>
+          </div>
         </div>
 
-        {/* Controles */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-
-          {/* Shuffle on/off */}
-          <button onClick={toggleShuffle} title={shuffleOn ? 'Aleatorio: ON' : 'Aleatorio: OFF'}
-            style={{ background: shuffleOn ? `${chColor}25` : 'none', border: `1px solid ${shuffleOn ? chColor : '#2a3448'}`, borderRadius: 6, width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: shuffleOn ? chColor : '#475569', transition: 'all 0.15s' }}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} width="14" height="14">
-              <polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/>
-              <polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/>
-              <line x1="4" y1="4" x2="9" y2="9"/>
-            </svg>
-          </button>
-
-          {/* Play / Pause */}
-          <button onClick={togglePlay} title={isPlaying ? 'Pausar' : 'Continuar'}
-            style={{ background: chColor, border: 'none', borderRadius: '50%', width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#0f1117', flexShrink: 0, boxShadow: `0 0 12px ${chColor}55` }}>
-            {isPlaying ? (
-              <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
-                <rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>
-              </svg>
-            ) : (
-              <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
-                <polygon points="5 3 19 12 5 21 5 3"/>
-              </svg>
-            )}
-          </button>
-
-          {/* Siguiente */}
-          <button onClick={next} title="Siguiente aleatoria"
-            style={{ background: 'none', border: '1px solid #2a3448', borderRadius: 6, width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#64748b', transition: 'all 0.15s' }}>
-            <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
-              <polygon points="5 4 15 12 5 20 5 4"/>
-              <line x1="19" y1="5" x2="19" y2="19" stroke="currentColor" strokeWidth={2} fill="none"/>
-            </svg>
-          </button>
-
-          {/* Detener / Desconectar */}
-          <button onClick={stop} title="Detener y desconectar"
-            style={{ background: 'none', border: '1px solid #3f1515', borderRadius: 6, width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#ef4444', transition: 'all 0.15s' }}>
-            <svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12">
-              <rect x="3" y="3" width="18" height="18" rx="2"/>
-            </svg>
-          </button>
+        {/* Barra de progreso + tiempo */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 9, color: '#475569', flexShrink: 0, minWidth: 26, textAlign: 'right' }}>{fmt(elapsed)}</span>
+          <div
+            onClick={handleBarClick}
+            style={{ flex: 1, height: 4, background: '#1e2435', borderRadius: 2, cursor: 'pointer', position: 'relative', overflow: 'hidden' }}
+          >
+            <div style={{ height: '100%', width: `${progress * 100}%`, background: chColor, borderRadius: 2, transition: 'width 0.4s linear' }} />
+          </div>
+          {duration > 0 && (
+            <span style={{ fontSize: 9, color: '#334155', flexShrink: 0, minWidth: 26 }}>
+              {fmt(Math.floor(duration))}
+            </span>
+          )}
         </div>
       </div>
     </>
