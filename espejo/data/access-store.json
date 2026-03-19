@@ -126,9 +126,11 @@
       "id": "req_20260318_zkic642j",
       "name": "Ivelise Garcell Rodríguez",
       "email": "igarcelrodriguez@gmail.com",
-      "status": "pending",
+      "status": "approved",
       "created_at": "2026-03-18T02:58:35.9262658Z",
-      "updated_at": "2026-03-18T02:58:35.9262658Z",
+      "updated_at": "2026-03-19T10:31:28.124084Z",
+      "decision_at": "2026-03-19T10:31:28.124084Z",
+      "decision_by": "RAULI",
       "requester_ip": "::1",
       "user_agent": "Go-http-client/1.1"
     }
@@ -194,6 +196,33 @@
       "activated_at": "2026-03-16T12:05:00Z",
       "approved_by": "Rauli"
     },
+    "usr_20260319_vj2i6an3": {
+      "id": "usr_20260319_vj2i6an3",
+      "request_id": "req_20260318_zkic642j",
+      "name": "Ivelise Garcell Rodríguez",
+      "email": "igarcelrodriguez@gmail.com",
+      "status": "active",
+      "access_code": "7APR6F6RV4",
+      "created_at": "2026-03-19T10:31:28.124084Z",
+      "updated_at": "2026-03-19T10:31:28.124084Z",
+      "activated_at": "2026-03-19T10:31:28.124084Z",
+      "approved_by": "RAULI"
+    },
+    "usr_cami_001": {
+      "id": "usr_cami_001",
+      "request_id": "req_cami_001",
+      "name": "Cami",
+      "email": "cami@rauli.local",
+      "phone": "+5351440494",
+      "role": "Usuario",
+      "organization": "RAULI",
+      "status": "active",
+      "access_code": "CAMI2026HH",
+      "created_at": "2026-01-01T10:00:00Z",
+      "updated_at": "2026-03-19T10:16:49Z",
+      "activated_at": "2026-01-01T10:00:00Z",
+      "approved_by": "Owner"
+    },
     "usr_imp_bety00001": {
       "id": "usr_imp_bety00001",
       "request_id": "req_20260313_bety001",
@@ -254,22 +283,6 @@
       "activated_at": "2026-03-01T10:00:00Z",
       "approved_by": "Rauli"
     },
-    "usr_cami_001": {
-      "id": "usr_cami_001",
-      "request_id": "req_cami_001",
-      "name": "Cami",
-      "email": "cami@rauli.local",
-      "phone": "+5351440494",
-      "role": "Usuario",
-      "organization": "RAULI",
-      "status": "active",
-      "access_code": "CAMI2026HH",
-      "code_sent": false,
-      "created_at": "2026-01-01T10:00:00Z",
-      "updated_at": "2026-03-19T10:16:49Z",
-      "activated_at": "2026-01-01T10:00:00Z",
-      "approved_by": "Owner"
-    },
     "usr_raulitin_001": {
       "id": "usr_raulitin_001",
       "request_id": "req_raulitin_001",
@@ -280,12 +293,11 @@
       "organization": "RAULI",
       "status": "active",
       "access_code": "RLTN2026II",
-      "code_sent": false,
       "created_at": "2026-01-01T10:00:00Z",
       "updated_at": "2026-03-19T10:16:49Z",
       "activated_at": "2026-01-01T10:00:00Z",
       "approved_by": "Owner"
     }
   },
-  "updated_at": "2026-03-19T10:16:49Z"
+  "updated_at": "2026-03-19T10:31:28.124084Z"
 }
