@@ -17,6 +17,7 @@ import (
 
 type Proxy struct {
 	espejoURL    string
+	atlasURL     string
 	clientID     string
 	clientSecret string
 	version      string
@@ -27,12 +28,16 @@ type Proxy struct {
 	client       *http.Client
 }
 
-func NewProxy(espejoURL, clientID, clientSecret, version string, c *cache.Cache, static http.FileSystem) *Proxy {
+func NewProxy(espejoURL, atlasURL, clientID, clientSecret, version string, c *cache.Cache, static http.FileSystem) *Proxy {
 	if version == "" {
 		version = "1.0.0"
 	}
+	if strings.TrimSpace(atlasURL) == "" {
+		atlasURL = "http://127.0.0.1:8791"
+	}
 	return &Proxy{
 		espejoURL:    strings.TrimSuffix(espejoURL, "/"),
+		atlasURL:     strings.TrimRight(strings.TrimSpace(atlasURL), "/"),
 		clientID:     clientID,
 		clientSecret: clientSecret,
 		version:      version,
@@ -168,7 +173,12 @@ func (p *Proxy) serveAPI(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	targetURL := p.espejoURL + r.URL.Path
+	targetBaseURL := p.espejoURL
+	if r.URL.Path == "/api/rauli/users" || strings.HasPrefix(r.URL.Path, "/api/rauli/users/") {
+		targetBaseURL = p.atlasURL
+	}
+
+	targetURL := targetBaseURL + r.URL.Path
 	if r.URL.RawQuery != "" {
 		targetURL += "?" + r.URL.RawQuery
 	}

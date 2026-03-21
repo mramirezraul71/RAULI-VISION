@@ -183,13 +183,13 @@ export async function videoMeta(id: string): Promise<{
   hls_proxy_url?: string
   has_hls?: boolean
 }> {
-  const r = await fetch(`${BASE}/api/video/${encodeURIComponent(id)}`)
+  const r = await fetch(withUser(`${BASE}/api/video/${encodeURIComponent(id)}`))
   if (!r.ok) throw new Error('Video no encontrado')
   return r.json()
 }
 
 export async function videoRequest(id: string, quality = '360p'): Promise<{ job_id: string; status: string; message: string }> {
-  const r = await fetch(`${BASE}/api/video/${encodeURIComponent(id)}/request`, {
+  const r = await fetch(withUser(`${BASE}/api/video/${encodeURIComponent(id)}/request`), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ quality }),
@@ -199,7 +199,7 @@ export async function videoRequest(id: string, quality = '360p'): Promise<{ job_
 }
 
 export async function videoStatus(id: string, jobId: string): Promise<{ job_id: string; status: string; progress_percent: number }> {
-  const r = await fetch(`${BASE}/api/video/${encodeURIComponent(id)}/status?job_id=${encodeURIComponent(jobId)}`)
+  const r = await fetch(withUser(`${BASE}/api/video/${encodeURIComponent(id)}/status?job_id=${encodeURIComponent(jobId)}`))
   if (!r.ok) throw new Error('Estado no disponible')
   return r.json()
 }
@@ -212,7 +212,7 @@ export async function videoChannelsHealth(max = 12, mode: 'cuba' | 'direct' = 'c
   reachable: number
   unavailable: number
 }> {
-  const r = await fetch(`${BASE}/api/video/channels/health?max=${max}&mode=${encodeURIComponent(mode)}`)
+  const r = await fetch(withUser(`${BASE}/api/video/channels/health?max=${max}&mode=${encodeURIComponent(mode)}`))
   if (!r.ok) throw new Error('No se pudo comprobar la salud de los canales')
   return r.json()
 }
@@ -268,7 +268,7 @@ export function tiktokTrendingLive(
   onInitial: (items: TikTokFeedItem[], cachedAt: string) => void,
   onUpdate: (items: TikTokFeedItem[], cachedAt: string) => void,
 ): EventSource {
-  const es = new EventSource(`${BASE}/api/tiktok/trending/live`)
+  const es = new EventSource(withUser(`${BASE}/api/tiktok/trending/live`))
   es.onmessage = (event) => {
     try {
       const payload = JSON.parse(event.data) as {
@@ -309,13 +309,13 @@ export type TikTokVideoInfo = {
 }
 
 export async function tiktokStatus(): Promise<TikTokStatus> {
-  const r = await fetch(`${BASE}/api/tiktok/status`)
+  const r = await fetch(withUser(`${BASE}/api/tiktok/status`))
   if (!r.ok) throw new Error('No se pudo verificar el estado del proxy TikTok')
   return r.json()
 }
 
 export async function tiktokFetch(url: string): Promise<TikTokVideoInfo> {
-  const r = await fetch(`${BASE}/api/tiktok/fetch?url=${encodeURIComponent(url)}`)
+  const r = await fetch(withUser(`${BASE}/api/tiktok/fetch?url=${encodeURIComponent(url)}`))
   if (!r.ok) {
     const body = await r.json().catch(() => ({})) as { message?: string }
     throw new Error(body.message || 'No se pudo obtener el video de TikTok')

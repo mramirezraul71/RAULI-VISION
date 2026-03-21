@@ -18,6 +18,10 @@ func main() {
 	if espejoURL == "" {
 		espejoURL = "http://localhost:8080"
 	}
+	atlasURL := os.Getenv("ATLAS_BASE_URL")
+	if atlasURL == "" {
+		atlasURL = "http://127.0.0.1:8791"
+	}
 	clientID := os.Getenv("CLIENT_ID")
 	clientSecret := os.Getenv("CLIENT_SECRET")
 	if clientID == "" {
@@ -45,7 +49,7 @@ func main() {
 	defer c.Close()
 
 	staticRoot := http.FS(os.DirFS("static"))
-	proxy := api.NewProxy(espejoURL, clientID, clientSecret, version, c, staticRoot)
+	proxy := api.NewProxy(espejoURL, atlasURL, clientID, clientSecret, version, c, staticRoot)
 	// Pocos usuarios, calidad: límite moderado por IP para servicio estable sin saturar.
 	rl := middleware.NewRateLimiter(180, time.Minute)
 	handler := middleware.Logging(middleware.RequestID(rl.Middleware(proxy)))

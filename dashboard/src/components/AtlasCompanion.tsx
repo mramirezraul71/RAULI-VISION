@@ -12,7 +12,7 @@ import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPoi
 import { pingPresence, synthesizeSpeech, getVoiceEnabled, setVoiceEnabled } from '../api/client'
 
 // ── Config ─────────────────────────────────────────────────────────────────
-const ATLAS_API  = 'http://127.0.0.1:8791'
+const ATLAS_API  = ''
 const TOKEN_KEY  = 'rauli_user_token'
 const AVATAR_POS_KEY = 'rauli_avatar_pos_v1'
 const DRAG_MARGIN = 8

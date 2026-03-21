@@ -15,7 +15,7 @@ import {
 
 const ADMIN_TOKEN_KEY  = 'rauli_admin_token'
 const ADMIN_NAME_KEY   = 'rauli_admin_name'
-const ATLAS_API        = 'http://127.0.0.1:8791'
+const ATLAS_API        = ''
 
 /** Registra el usuario aprobado en Atlas para activar el avatar personalizado via /?u=<access_code> */
 async function syncUserToAtlas(name: string, accessCode: string): Promise<void> {

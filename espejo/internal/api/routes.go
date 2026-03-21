@@ -13,12 +13,12 @@ import (
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/digest"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/divisas"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/feedback"
-	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/store"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/middleware"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/noticias"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/owner"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/radio"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/search"
+	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/store"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/tiktok"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/traducir"
 	"github.com/mramirezraul71/RAULI-VISION/espejo/internal/tts"
@@ -28,14 +28,14 @@ import (
 )
 
 func Register(mux *http.ServeMux, version string, authSvc *auth.Service, searchSvc *search.Service, videoSvc *video.Service, chatSvc *chat.Service, accessSvc *access.Service, adminToken string, rl *middleware.RateLimiter, ttsSvc *tts.Service) {
-	camiSvc     := cami.New()
+	camiSvc := cami.New()
 	feedbackSvc := feedback.New()
-	tiktokSvc   := tiktok.New()
-	climaSvc    := clima.New()
+	tiktokSvc := tiktok.New()
+	climaSvc := clima.New()
 	noticiasSvc := noticias.New()
-	radioSvc    := radio.New()
+	radioSvc := radio.New()
 	traducirSvc := traducir.New()
-	youtubeSvc  := youtube.New()
+	youtubeSvc := youtube.New()
 	// SQLite store — persiste tasas de cambio + histórico de resúmenes
 	dbPath := os.Getenv("RAULI_DB_PATH")
 	if dbPath == "" {
@@ -47,9 +47,9 @@ func Register(mux *http.ServeMux, version string, authSvc *auth.Service, searchS
 		db = nil
 	}
 
-	divisasSvc  := divisas.New(db)
-	geminiKey   := strings.TrimSpace(os.Getenv("GEMINI_API_KEY"))
-	digestSvc   := digest.New(geminiKey, noticiasSvc, climaSvc, db)
+	divisasSvc := divisas.New(db)
+	geminiKey := strings.TrimSpace(os.Getenv("GEMINI_API_KEY"))
+	digestSvc := digest.New(geminiKey, noticiasSvc, climaSvc, db)
 
 	// Inicializar Owner panel (bus de eventos + canal de tareas)
 	ownerSvc := owner.Init(adminToken, geminiKey)
@@ -57,8 +57,8 @@ func Register(mux *http.ServeMux, version string, authSvc *auth.Service, searchS
 	// Vault — catálogo de contenido offline (2 canales: cami + variado)
 	vaultSvc := vault.New(adminToken)
 	vaultSvc.StartRotationWorker()
-	vaultSvc.StartScanWorker()  // auto-indexa archivos colocados en VAULT_ROOT
-	vaultSvc.StartSeedWorker()  // descarga contenido de YouTube según VAULT_SEED_* env vars
+	vaultSvc.StartScanWorker() // auto-indexa archivos colocados en VAULT_ROOT
+	vaultSvc.StartSeedWorker() // descarga contenido de YouTube según VAULT_SEED_* env vars
 
 	h := &Handlers{
 		Auth:       authSvc,
@@ -102,7 +102,7 @@ func Register(mux *http.ServeMux, version string, authSvc *auth.Service, searchS
 	mux.HandleFunc("GET /api/access/users", rateWrap(logWrap(wrap(h.ListAccessUsers))))
 	mux.HandleFunc("PUT /api/access/users/", rateWrap(logWrap(wrap(h.HandleAccessUserAction))))
 	mux.HandleFunc("POST /api/access/users/direct", rateWrap(logWrap(wrap(h.PostAccessDirectCreate)))) // owner crea usuario directamente
-	mux.HandleFunc("POST /api/access/presence/", rateWrap(logWrap(h.PostPresence))) // sin auth, solo heartbeat
+	mux.HandleFunc("POST /api/access/presence/", rateWrap(logWrap(h.PostPresence)))                    // sin auth, solo heartbeat
 	mux.HandleFunc("GET /api/search", chain(h.getSearch))
 	mux.HandleFunc("GET /api/video/search", chain(h.getVideoSearch))
 	mux.HandleFunc("GET /api/video/channels/health", chain(h.getVideoChannelsHealth))
@@ -178,8 +178,8 @@ func Register(mux *http.ServeMux, version string, authSvc *auth.Service, searchS
 	// GET  /api/owner/recent   → últimos 50 eventos (REST fallback)
 	// POST /api/owner/task     → envía tarea a Gemini, recibe respuesta
 	mux.HandleFunc("GET /api/owner/activity", logWrap(ownerSvc.ServeActivity)) // SSE sin brotli
-	mux.HandleFunc("GET /api/owner/recent",   logWrap(wrap(ownerSvc.ServeRecent)))
-	mux.HandleFunc("POST /api/owner/task",    rateWrap(logWrap(wrap(ownerSvc.ServeTask))))
+	mux.HandleFunc("GET /api/owner/recent", logWrap(wrap(ownerSvc.ServeRecent)))
+	mux.HandleFunc("POST /api/owner/task", rateWrap(logWrap(wrap(ownerSvc.ServeTask))))
 
 	// ── Digest — Resumen del día: noticias + clima + Gemini ───────────────────
 	mux.HandleFunc("GET /api/digest", chain(h.GetDigest))
@@ -196,14 +196,14 @@ func Register(mux *http.ServeMux, version string, authSvc *auth.Service, searchS
 	// POST /api/vault/admin/rotate           → forzar rotación de slot (X-Admin-Token)
 	// GET  /api/vault/admin/status           → estado del vault (X-Admin-Token)
 	// DELETE /api/vault/admin/item/{id}      → eliminar item (X-Admin-Token)
-	mux.HandleFunc("GET /api/vault/catalog",        chain(h.GetVaultCatalog))
-	mux.HandleFunc("/api/vault/stream/",            h.StreamVaultItem) // sin brotli: binario
-	mux.HandleFunc("POST /api/vault/admin/upload",  rateWrap(logWrap(h.PostVaultUpload)))
-	mux.HandleFunc("POST /api/vault/admin/rotate",  rateWrap(logWrap(h.PostVaultRotate)))
-	mux.HandleFunc("GET /api/vault/admin/status",   rateWrap(logWrap(h.GetVaultStatus)))
+	mux.HandleFunc("GET /api/vault/catalog", chain(h.GetVaultCatalog))
+	mux.HandleFunc("/api/vault/stream/", h.StreamVaultItem) // sin brotli: binario
+	mux.HandleFunc("POST /api/vault/admin/upload", rateWrap(logWrap(h.PostVaultUpload)))
+	mux.HandleFunc("POST /api/vault/admin/rotate", rateWrap(logWrap(h.PostVaultRotate)))
+	mux.HandleFunc("GET /api/vault/admin/status", rateWrap(logWrap(h.GetVaultStatus)))
 	mux.HandleFunc("DELETE /api/vault/admin/item/", rateWrap(logWrap(h.DeleteVaultItem)))
-	mux.HandleFunc("POST /api/vault/admin/seed",    rateWrap(logWrap(h.PostVaultSeed)))
-	mux.HandleFunc("POST /api/vault/admin/scan",    rateWrap(logWrap(h.PostVaultScan)))
+	mux.HandleFunc("POST /api/vault/admin/seed", rateWrap(logWrap(h.PostVaultSeed)))
+	mux.HandleFunc("POST /api/vault/admin/scan", rateWrap(logWrap(h.PostVaultScan)))
 }
 
 func (h *Handlers) getSearch(w http.ResponseWriter, r *http.Request)      { h.GetSearch(w, r) }
@@ -268,12 +268,14 @@ func requireAuth(authSvc *auth.Service, accessSvc *access.Service, next http.Han
 			return
 		}
 
-		var code string
+		code := strings.TrimSpace(r.URL.Query().Get("u"))
 
 		// Vía 1: JWT Bearer
-		if authH := r.Header.Get("Authorization"); authH != "" && strings.HasPrefix(authH, "Bearer ") {
-			if clientID, err := authSvc.ValidateToken(strings.TrimPrefix(authH, "Bearer ")); err == nil && clientID != "" {
-				code = clientID
+		if code == "" {
+			if authH := r.Header.Get("Authorization"); authH != "" && strings.HasPrefix(authH, "Bearer ") {
+				if clientID, err := authSvc.ValidateToken(strings.TrimPrefix(authH, "Bearer ")); err == nil && clientID != "" {
+					code = clientID
+				}
 			}
 		}
 
