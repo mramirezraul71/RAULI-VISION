@@ -42,5 +42,22 @@ export default defineConfig({
       },
     }),
   ],
-  server: { proxy: { '/api': 'http://localhost:3000', '/auth': 'http://localhost:3000', '/owner': 'http://localhost:3000', '/vault': 'http://localhost:3000' } },
+  // Dev: Vite proxy hacia el Python en :3000
+  server: {
+    proxy: {
+      '/api': 'http://localhost:3000',
+      '/auth': 'http://localhost:3000',
+      '/owner': 'http://localhost:3000',
+      '/vault': 'http://localhost:3000',
+    },
+  },
+  // Preview (npm run preview): sin esto, /api/* no se reenvía y el dashboard parece "desconectado"
+  preview: {
+    proxy: {
+      '/api': 'http://localhost:3000',
+      '/auth': 'http://localhost:3000',
+      '/owner': 'http://localhost:3000',
+      '/vault': 'http://localhost:3000',
+    },
+  },
 })

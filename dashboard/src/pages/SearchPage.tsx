@@ -51,7 +51,7 @@ export function SearchPage() {
           <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-sm">
             <p className="text-red-400 font-medium">{(error as Error).message}</p>
             <p className="text-muted mt-2 text-xs">
-              Para búsqueda real: ejecute Espejo (puerto 8080) y Proxy (puerto 3000), por ejemplo con <code className="bg-black/30 px-1 rounded">.\scripts\run-all.ps1</code>.
+              Para búsqueda real: ejecute Espejo (puerto 8080) y Proxy (puerto 3000), por ejemplo con <code className="bg-black/30 px-1 rounded">.\RAULI_VISION.ps1</code> en la raíz de ATLAS_PUSH (o <code className="bg-black/30 px-1 rounded">.\scripts\run-all.ps1</code> dentro de RAULI-VISION si usa el proxy Go).
             </p>
             <button
               type="button"
